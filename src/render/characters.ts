@@ -71,7 +71,7 @@ export function createGuardModel(): GuardModel {
 }
 
 /** Target height of a guard model in world units (one tile is 1). */
-const GUARD_HEIGHT = 1.05;
+const GUARD_HEIGHT = 1.3;
 let guardTemplate: Promise<THREE.Object3D | null> | null = null;
 
 /**
@@ -84,6 +84,19 @@ export function loadGuardTemplate(): Promise<THREE.Object3D | null> {
       'models/guard.glb',
       (gltf) => {
         const model = gltf.scene;
+        // Generated PBR materials are tuned for an environment map we do not have. Make them matte and let the
+        // albedo texture glow a little, so the robot reads clearly under the museum's sparse lighting.
+        model.traverse((obj) => {
+          const mat = (obj as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
+          if (!mat || !('metalness' in mat)) return;
+          mat.metalness = Math.min(mat.metalness, 0.25);
+          mat.roughness = Math.max(mat.roughness, 0.55);
+          if (mat.map) {
+            mat.emissive = new THREE.Color(0xffffff);
+            mat.emissiveMap = mat.map;
+            mat.emissiveIntensity = 0.45;
+          }
+        });
         // Normalise: feet on the floor, centred on the tile, a fixed height whatever the source scale was.
         const box = new THREE.Box3().setFromObject(model);
         const size = box.getSize(new THREE.Vector3());

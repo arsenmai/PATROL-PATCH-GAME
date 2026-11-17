@@ -172,8 +172,9 @@ export class GameUI {
     for (const file of ['title.jpg', 'title.png']) {
       const img = new Image();
       img.onload = () => {
-        this.titleArt ??= file;
-        this.root.querySelector<HTMLElement>('.overlay.menu')?.style.setProperty('--art', `url(${this.titleArt})`);
+        // Absolute URL: a relative one inside a CSS variable would resolve against the stylesheet, not the page.
+        this.titleArt ??= new URL(file, document.baseURI).href;
+        this.root.querySelector<HTMLElement>('.overlay.menu')?.style.setProperty('--art', `url("${this.titleArt}")`);
       };
       img.src = file;
     }
@@ -183,7 +184,7 @@ export class GameUI {
     this.setOverlay(
       h(
         'div',
-        { class: 'overlay menu', style: this.titleArt ? `--art:url(${this.titleArt})` : undefined },
+        { class: 'overlay menu', style: this.titleArt ? `--art:url("${this.titleArt}")` : undefined },
         h(
           'div',
           { class: 'menu-card' },

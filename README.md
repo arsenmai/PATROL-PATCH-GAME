@@ -9,7 +9,8 @@ comes down to one question: leave now, or stay for more?
 
 Afterwards you can replay your exact moves against the *original* AI and see where the two timelines split.
 
-![An artifact stolen mid-heist](docs/screenshot-heist.png)
+![Main menu](docs/screenshot-menu.png)
+![Mid-heist](docs/screenshot-heist.png)
 ![Guard AI Editor](docs/screenshot-editor.png)
 ![Counterfactual replay](docs/screenshot-compare.png)
 
@@ -200,7 +201,10 @@ src/
   `CHASE` and `INVESTIGATE` would not matter.
 * **BFS instead of A\*.** On a 12×12 grid BFS is optimal, simpler, and its tie-breaking is easy to reason about.
 * **Guards may share a tile.** Avoiding that would need a collision rule that adds state without adding puzzle depth.
-* **All graphics are procedural** (primitives, instancing, emissive materials, one bloom pass). There are no
+* **Two generated assets, both optional.** The menu key art (`public/title.jpg`) and the guard model
+  (`public/models/guard.glb`) were generated with Higgsfield (GPT Image and Tripo text-to-3D). The game probes for
+  them at start-up and falls back to the procedural menu and the primitive robot if they are missing.
+* **Everything else is procedural** (primitives, instancing, emissive materials, one bloom pass). There are no
   texture or model files; the production bundle is about 140 kB gzipped.
 
 ## Technical highlights
