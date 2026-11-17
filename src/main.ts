@@ -1,5 +1,5 @@
 import './style.css';
-import { LabScene } from './render/scene';
+import { LabScene, MOVE_MS } from './render/scene';
 import { LAB_LEVEL } from './sim/level';
 import { PatchSystem } from './sim/patch';
 import { ReplayRecorder, compareReplays } from './sim/replay';
@@ -40,6 +40,8 @@ class Game {
   private phase: Phase = 'MENU';
   private compareView: CompareView | null = null;
   private resultTimer = 0;
+  /** One buffered input, so quick typing during a move tween is not lost. */
+  private queued: Action | null = null;
 
   constructor(root: HTMLElement) {
     const stage = root.querySelector<HTMLElement>('#stage')!;
@@ -50,7 +52,7 @@ class Game {
       onSelectGuard: (id) => this.phase === 'HACK' && this.scene.setSelectedGuard(id),
       onPatchChanged: () => this.resetWorld(),
     });
-    this.ui = new GameUI(root, stage, panel, this.editor.el, {
+    this.ui = new GameUI(root, this.level, stage, panel, this.editor.el, {
       onStart: () => this.setPhase('BRIEFING'),
       onBriefingDone: () => this.setPhase('HACK'),
       onInfiltrate: () => this.setPhase('PLAY'),
@@ -77,6 +79,7 @@ class Game {
 
   private setPhase(phase: Phase): void {
     window.clearTimeout(this.resultTimer);
+    this.queued = null;
     this.compareView?.destroy();
     this.compareView = null;
     this.phase = phase;
@@ -145,8 +148,9 @@ class Game {
     const action = KEYS[e.code];
     if (!action || this.phase !== 'PLAY') return;
     e.preventDefault();
-    if (this.scene.isAnimating || this.state.status !== 'PLAYING') return;
-    this.act(action);
+    if (this.state.status !== 'PLAYING') return;
+    if (this.scene.isAnimating) this.queued = action;
+    else this.act(action);
   };
 
   private act(action: Action): void {
@@ -164,14 +168,24 @@ class Game {
     this.ui.log(result.events);
     this.editor.setLiveState(this.state);
 
-    if (this.state.status === 'SUCCESS') sfx.success();
-    else if (this.state.status === 'CAUGHT') sfx.caught();
-    else if (result.events.some((ev) => ev.kind === 'DETECTED')) sfx.detected();
-    else sfx.step();
+    const happened = (kind: string) => result.events.some((ev) => ev.kind === kind);
+    if (this.state.status === 'ESCAPED') sfx.success();
+    else if (this.state.status !== 'PLAYING') sfx.caught();
+    else if (happened('DETECTED')) sfx.detected();
+    else if (happened('LOOT')) {
+      sfx.loot();
+      if (happened('CURSE')) sfx.curse();
+    } else sfx.step();
 
     if (this.state.status !== 'PLAYING') {
       this.resultTimer = window.setTimeout(() => this.setPhase('RESULT'), 900);
+      return;
     }
+    window.setTimeout(() => {
+      const next = this.queued;
+      this.queued = null;
+      if (next && this.phase === 'PLAY' && this.state.status === 'PLAYING') this.act(next);
+    }, MOVE_MS + 10);
   }
 }
 

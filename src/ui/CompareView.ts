@@ -1,8 +1,9 @@
+import { guardMods } from '../sim/curses';
 import { visibleTiles } from '../sim/detection';
 import { DELTA } from '../sim/grid';
 import type { Comparison, Replay } from '../sim/replay';
 import type { GameState, Level, Patch } from '../sim/types';
-import { COLORS, STATE_COLOR, css } from '../render/palette';
+import { COLORS, CURSE_COLOR, STATE_COLOR, css } from '../render/palette';
 import { h } from './dom';
 
 const TILE = 30;
@@ -37,21 +38,34 @@ function drawMap(canvas: HTMLCanvasElement, level: Level, state: GameState): voi
     ctx.strokeRect(level.door.x * TILE + 3, level.door.y * TILE + 3, TILE - 6, TILE - 6);
   }
 
-  const [tx, ty] = centre(level.terminal);
-  ctx.fillStyle = css(state.status === 'SUCCESS' ? COLORS.green : COLORS.cyan);
-  ctx.beginPath();
-  ctx.moveTo(tx, ty - 10);
-  ctx.lineTo(tx + 10, ty);
-  ctx.lineTo(tx, ty + 10);
-  ctx.lineTo(tx - 10, ty);
-  ctx.closePath();
-  ctx.fill();
+  const [ex, ey] = centre(level.start);
+  ctx.strokeStyle = css(COLORS.green);
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([3, 3]);
+  ctx.strokeRect(ex - 11, ey - 11, 22, 22);
+  ctx.setLineDash([]);
 
+  for (const a of level.artifacts) {
+    const stolen = state.taken.includes(a.id);
+    if (stolen && !a.terminal) continue;
+    const [ax, ay] = centre(a.pos);
+    const r = a.terminal ? 10 : 6;
+    ctx.fillStyle = css(stolen ? COLORS.green : a.terminal ? COLORS.cyan : CURSE_COLOR[a.curse ?? 'NONE']);
+    ctx.beginPath();
+    ctx.moveTo(ax, ay - r);
+    ctx.lineTo(ax + r, ay);
+    ctx.lineTo(ax, ay + r);
+    ctx.lineTo(ax - r, ay);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  const { rangeBonus } = guardMods(state);
   state.guards.forEach((g, i) => {
     const colour = css(g.seesPlayer ? COLORS.red : STATE_COLOR[g.state]);
     ctx.globalAlpha = g.seesPlayer ? 0.4 : 0.2;
     ctx.fillStyle = colour;
-    for (const t of visibleTiles(level, g.pos, g.facing, level.guards[i].range)) {
+    for (const t of visibleTiles(level, g.pos, g.facing, level.guards[i].range + rangeBonus)) {
       ctx.fillRect(t.x * TILE + 2, t.y * TILE + 2, TILE - 4, TILE - 4);
     }
     ctx.globalAlpha = 1;
@@ -84,11 +98,12 @@ function drawMap(canvas: HTMLCanvasElement, level: Level, state: GameState): voi
   });
 
   const [px, py] = centre(state.player);
-  ctx.fillStyle = css(state.status === 'CAUGHT' ? COLORS.red : COLORS.green);
+  const lost = state.status === 'CAUGHT' || state.status === 'TRAPPED';
+  ctx.fillStyle = css(lost ? COLORS.red : COLORS.green);
   ctx.beginPath();
   ctx.arc(px, py, 6.5, 0, Math.PI * 2);
   ctx.fill();
-  if (state.status === 'CAUGHT') {
+  if (lost) {
     ctx.strokeStyle = css(COLORS.red);
     ctx.lineWidth = 3;
     ctx.beginPath();
@@ -102,8 +117,9 @@ function drawMap(canvas: HTMLCanvasElement, level: Level, state: GameState): voi
 
 const OUTCOME: Record<GameState['status'], string> = {
   PLAYING: 'IN PROGRESS',
-  CAUGHT: 'CAPTURED',
-  SUCCESS: 'TERMINAL BREACHED',
+  CAUGHT: 'CAPTURED — LOOT LOST',
+  TRAPPED: 'LOCKED IN — LOOT LOST',
+  ESCAPED: 'ESCAPED',
 };
 
 /**
@@ -239,6 +255,7 @@ export class CompareView {
         'table',
         {},
         h('tr', {}, h('th', {}, 'PLAYER'), h('td', {}, `(${state.player.x}, ${state.player.y})`)),
+        h('tr', {}, h('th', {}, 'LOOT'), h('td', {}, `£${state.loot}${state.curses.length ? '  ·  ' + state.curses.join(', ') : ''}`)),
         ...state.guards.map((g) =>
           h(
             'tr',

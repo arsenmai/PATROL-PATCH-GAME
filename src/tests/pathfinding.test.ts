@@ -48,7 +48,10 @@ describe('player movement', () => {
     expect(step(LAB_LEVEL, moved.state, 'WAIT').state.turn).toBe(2);
   });
 
-  it('rejects INTERACT away from the terminal', () => {
-    expect(step(LAB_LEVEL, createInitialState(LAB_LEVEL), 'INTERACT').advanced).toBe(false);
+  it('rejects INTERACT when there is nothing to interact with', () => {
+    const s1 = step(LAB_LEVEL, createInitialState(LAB_LEVEL), 'N').state;
+    const r = step(LAB_LEVEL, s1, 'INTERACT');
+    expect(r.advanced).toBe(false);
+    expect(r.state).toBe(s1);
   });
 });

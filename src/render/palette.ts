@@ -1,4 +1,4 @@
-import type { GuardState } from '../sim/types';
+import type { CurseId, GuardState } from '../sim/types';
 
 /** One palette shared by the 3D scene, the 2D comparison maps and the CSS. */
 export const COLORS = {
@@ -20,6 +20,15 @@ export const STATE_COLOR: Record<GuardState, number> = {
   INVESTIGATE: COLORS.amber,
   CHASE: COLORS.red,
   RETURN: COLORS.purple,
+};
+
+/** Colour of a prototype, by the countermeasure it is wired to. */
+export const CURSE_COLOR: Record<CurseId | 'NONE', number> = {
+  NONE: 0xd8f4ff,
+  OVERCLOCK: COLORS.red,
+  SENSOR_BOOST: COLORS.amber,
+  ROLLBACK: COLORS.magenta,
+  LOCKDOWN: COLORS.purple,
 };
 
 export const css = (hex: number): string => '#' + hex.toString(16).padStart(6, '0');

@@ -36,8 +36,22 @@ export function findPath(level: Level, from: Vec, to: Vec): Vec[] | null {
   return null;
 }
 
-/** First tile on the shortest path, or null if there is nowhere to go. */
+const stepCache = new WeakMap<Level, Map<number, Vec | null>>();
+
+/**
+ * First tile on the shortest path, or null if there is nowhere to go.
+ * Levels are immutable, so answers are memoised per (from, to) pair; the solver calls this millions of times.
+ */
 export function nextStep(level: Level, from: Vec, to: Vec): Vec | null {
-  const path = findPath(level, from, to);
-  return path && path.length > 0 ? path[0] : null;
+  let cache = stepCache.get(level);
+  if (!cache) stepCache.set(level, (cache = new Map()));
+  const size = level.width * level.height;
+  const key = (from.y * level.width + from.x) * size + to.y * level.width + to.x;
+  let next = cache.get(key);
+  if (next === undefined) {
+    const path = findPath(level, from, to);
+    next = path && path.length > 0 ? path[0] : null;
+    cache.set(key, next);
+  }
+  return next;
 }

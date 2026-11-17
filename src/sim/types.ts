@@ -45,6 +45,20 @@ export interface GuardDef {
   range: number;
 }
 
+/** A security countermeasure wired to a prototype. Stealing the prototype triggers it for the rest of the run. */
+export type CurseId = 'OVERCLOCK' | 'SENSOR_BOOST' | 'ROLLBACK' | 'LOCKDOWN';
+
+export interface ArtifactDef {
+  id: string;
+  name: string;
+  /** Loot value in pounds. */
+  value: number;
+  curse: CurseId | null;
+  pos: Vec;
+  /** The vault terminal is solid and is hacked from an adjacent tile; other loot is grabbed from its own tile. */
+  terminal?: boolean;
+}
+
 export interface Decor {
   type: 'camera' | 'console' | 'tank';
   x: number;
@@ -57,10 +71,12 @@ export interface Level {
   height: number;
   /** Normalised rows: '#' wall, '.' floor, 'T' terminal. */
   tiles: string[];
+  /** Player start, which is also the extraction point. */
   start: Vec;
   terminal: Vec;
   door: Vec | null;
   guards: GuardDef[];
+  artifacts: ArtifactDef[];
   decor: Decor[];
 }
 
@@ -81,16 +97,24 @@ export interface Guard {
   hacked: boolean;
 }
 
-export type Status = 'PLAYING' | 'CAUGHT' | 'SUCCESS';
+export type Status = 'PLAYING' | 'CAUGHT' | 'TRAPPED' | 'ESCAPED';
 
 export interface GameState {
   turn: number;
   player: Vec;
   guards: Guard[];
   status: Status;
+  /** Value of everything carried. Only banked by escaping. */
+  loot: number;
+  /** Ids of stolen artifacts, in the order they were taken. */
+  taken: string[];
+  /** Countermeasures triggered so far. */
+  curses: CurseId[];
+  /** Turn on which the exit seals, once LOCKDOWN has been triggered. */
+  lockdownAt: number | null;
 }
 
-export type EventKind = 'DETECTED' | 'LOST' | 'STATE' | 'CAUGHT' | 'SUCCESS' | 'BLOCKED';
+export type EventKind = 'DETECTED' | 'LOST' | 'STATE' | 'CAUGHT' | 'TRAPPED' | 'ESCAPED' | 'LOOT' | 'CURSE' | 'BLOCKED';
 
 export interface GameEvent {
   turn: number;

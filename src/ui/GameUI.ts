@@ -1,4 +1,7 @@
-import type { GameEvent, GameState } from '../sim/types';
+import { CURSES, lockdownRemaining } from '../sim/curses';
+import { LAB_PROVEN, totalLoot } from '../sim/level';
+import type { GameEvent, GameState, Level } from '../sim/types';
+import { CURSE_COLOR, css } from '../render/palette';
 import { h } from './dom';
 
 export interface UICallbacks {
@@ -14,6 +17,10 @@ export interface UICallbacks {
 /** HUD, overlays and the event log. Holds no game rules. */
 export class GameUI {
   private readonly turnEl = h('strong', {}, '0');
+  private readonly lootEl = h('strong', {}, '£0');
+  private readonly lockEl = h('strong', {}, '');
+  private readonly lockBox = h('div', { class: 'hud-box small danger' }, h('span', {}, 'EXIT SEALS IN'), this.lockEl);
+  private readonly cursesEl = h('div', { class: 'hud-curses' });
   private readonly logEl = h('ul', { class: 'log' });
   private readonly alertEl = h('div', { class: 'alert-banner' }, '⚠ DETECTED');
   private readonly vignette = h('div', { class: 'vignette' });
@@ -24,6 +31,7 @@ export class GameUI {
 
   constructor(
     private readonly root: HTMLElement,
+    private readonly level: Level,
     stage: HTMLElement,
     panel: HTMLElement,
     editorEl: HTMLElement,
@@ -40,8 +48,15 @@ export class GameUI {
       h(
         'div',
         { class: 'hud-top' },
-        h('div', { class: 'hud-box' }, h('span', {}, 'OBJECTIVE'), h('strong', {}, 'Reach the vault terminal and press E')),
-        h('div', { class: 'hud-box small' }, h('span', {}, 'TURN'), this.turnEl),
+        h(
+          'div',
+          { class: 'hud-row' },
+          h('div', { class: 'hud-box' }, h('span', {}, 'OBJECTIVE'), h('strong', {}, 'Steal what you dare, then get back to the EXIT')),
+          h('div', { class: 'hud-box small' }, h('span', {}, 'TURN'), this.turnEl),
+          h('div', { class: 'hud-box small loot' }, h('span', {}, 'CARRYING'), this.lootEl),
+          this.lockBox,
+        ),
+        this.cursesEl,
       ),
       this.hintEl,
     );
@@ -59,17 +74,26 @@ export class GameUI {
     this.restartBtn.style.display = phase === 'PLAY' ? '' : 'none';
     this.hintEl.innerHTML =
       phase === 'PLAY'
-        ? '<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move · <kbd>Space</kbd> wait · <kbd>E</kbd> hack terminal · <kbd>R</kbd> restart · scroll to zoom'
+        ? '<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move · <kbd>Space</kbd> wait · <kbd>E</kbd> steal / hack / exit · <kbd>R</kbd> restart · scroll to zoom'
         : phase === 'HACK'
-          ? 'Pick a guard, stage one rule change, apply it, then start the infiltration.'
+          ? 'Pick a guard, stage one rule change, apply it, then start the infiltration. Tags show each prototype’s price and countermeasure.'
           : '';
   }
 
   update(state: GameState): void {
     this.turnEl.textContent = String(state.turn);
+    this.lootEl.textContent = `£${state.loot}`;
+    const left = lockdownRemaining(state);
+    this.lockBox.style.display = left === null ? 'none' : '';
+    this.lockEl.textContent = left === null ? '' : `${left} turns`;
+    this.cursesEl.replaceChildren(
+      ...state.curses.map((id) =>
+        h('span', { class: 'curse-chip', style: `--c:${css(CURSE_COLOR[id])}`, title: CURSES[id].summary }, `⚠ ${CURSES[id].name}`, h('small', {}, CURSES[id].summary)),
+      ),
+    );
     const detected = state.status === 'PLAYING' && state.guards.some((g) => g.seesPlayer);
     this.alertEl.classList.toggle('on', detected);
-    this.vignette.classList.toggle('on', detected || state.status === 'CAUGHT');
+    this.vignette.classList.toggle('on', detected || state.status === 'CAUGHT' || state.status === 'TRAPPED');
   }
 
   clearLog(): void {
@@ -93,9 +117,9 @@ export class GameUI {
         h(
           'div',
           { class: 'menu-card' },
-          h('p', { class: 'eyebrow' }, 'A STEALTH PUZZLE ABOUT REWRITING ENEMY AI'),
+          h('p', { class: 'eyebrow' }, 'A STEALTH HEIST ABOUT REWRITING ENEMY AI'),
           h('h1', { class: 'logo' }, 'PATROL', h('em', {}, 'PATCH')),
-          h('p', { class: 'tagline' }, "Don't outrun the guards. Out-think their code."),
+          h('p', { class: 'tagline' }, 'Rewrite one rule. Steal what you dare. Get out before it bites back.'),
           h('button', { class: 'btn primary big', onclick: () => this.cb.onStart() }, 'START MISSION'),
           h('p', { class: 'foot' }, 'Deterministic simulation · finite state machines · counterfactual replay'),
         ),
@@ -112,20 +136,25 @@ export class GameUI {
           'div',
           { class: 'card' },
           h('p', { class: 'eyebrow' }, 'MISSION BRIEFING'),
-          h('h2', {}, 'Access the classified terminal'),
+          h('h2', {}, `£${totalLoot(this.level)} of prototypes. How much is enough?`),
           h(
             'p',
             {},
-            'Your objective is to access the classified terminal. The facility is protected by autonomous security robots. You can modify one guard’s AI behaviour before infiltration.',
+            'The facility is protected by autonomous security robots. You can modify one guard’s AI behaviour before infiltration. Loot only counts if you walk it out through the exit.',
           ),
           h(
             'ol',
             { class: 'steps' },
             h('li', {}, h('b', {}, 'Hack. '), 'Each guard runs three IF → DO rules. You may rewrite exactly one rule on one guard.'),
-            h('li', {}, h('b', {}, 'Infiltrate. '), 'The lab is turn-based: guards only act when you do. Coloured tiles show what each guard can see.'),
+            h('li', {}, h('b', {}, 'Steal. '), 'Most prototypes are wired to a countermeasure: faster guards, longer sight, a firmware rollback, a lockdown. Each tag shows the price and what it triggers.'),
+            h('li', {}, h('b', {}, 'Leave — or push on. '), 'Return to the EXIT whenever you like. Get caught or locked in and you lose everything.'),
             h('li', {}, h('b', {}, 'Compare. '), 'Afterwards, replay your exact moves against the original AI and see where the timelines split.'),
           ),
-          h('p', { class: 'warn-line' }, 'Intel: with factory AI the vault is provably impossible to breach. Chasing guards move twice as fast as you.'),
+          h(
+            'p',
+            { class: 'warn-line' },
+            `Intel: the vault terminal is provably out of reach with factory AI. Proven maximum: £${LAB_PROVEN.withoutPatch} without a patch, £${LAB_PROVEN.withBestPatch} with the right one. Chasing guards are twice as fast as you.`,
+          ),
           h('button', { class: 'btn primary big', onclick: () => this.cb.onBriefingDone() }, 'OPEN GUARD AI EDITOR ▸'),
         ),
       ),
@@ -133,31 +162,42 @@ export class GameUI {
   }
 
   showResult(state: GameState, patched: boolean): void {
-    const win = state.status === 'SUCCESS';
+    const win = state.status === 'ESCAPED';
+    const max = LAB_PROVEN.withBestPatch;
+    const pct = Math.round((state.loot / max) * 100);
+
+    let title: string;
+    let body: string;
+    if (win) {
+      title = state.loot === 0 ? 'You left empty-handed' : state.loot >= max ? 'The perfect heist' : `Escaped with £${state.loot}`;
+      body =
+        state.loot >= max
+          ? `£${max} is the proven maximum for this facility. There is nothing more to take and still get out.`
+          : `That is ${pct}% of the proven maximum (£${max}). ${patched ? 'Greedier next time?' : `Without a patch the ceiling is £${LAB_PROVEN.withoutPatch}.`}`;
+    } else if (state.status === 'TRAPPED') {
+      title = 'Locked in';
+      body = `The exit sealed with £${state.loot} still in your bag. All of it is lost.`;
+    } else {
+      title = 'Intruder apprehended';
+      body = `Caught on turn ${state.turn} carrying £${state.loot}. All of it is lost.`;
+    }
+
     this.setOverlay(
       h(
         'div',
-        { class: `overlay result ${win ? 'win' : 'lose'}` },
+        { class: `overlay result ${win && state.loot > 0 ? 'win' : win ? '' : 'lose'}` },
         h(
           'div',
           { class: 'card' },
-          h('p', { class: 'eyebrow' }, win ? 'ACCESS GRANTED' : 'SECURITY ALERT'),
-          h('h2', {}, win ? 'Classified data extracted' : 'Intruder apprehended'),
-          win ? h('div', { class: 'download' }, h('i', {})) : null,
-          h(
-            'p',
-            {},
-            win
-              ? `Terminal breached in ${state.turn} turns. Now see what the original AI would have done with the very same moves.`
-              : patched
-                ? `Caught on turn ${state.turn}. Compare the timelines to see whether your patch changed anything, then try another rule or route.`
-                : `Caught on turn ${state.turn}. You went in without a patch — the stock AI cannot be beaten on foot.`,
-          ),
+          h('p', { class: 'eyebrow' }, win ? 'EXTRACTION COMPLETE' : 'SECURITY ALERT'),
+          h('h2', {}, title),
+          win ? h('div', { class: 'download' }, h('i', { style: `--w:${Math.min(100, pct)}%` })) : null,
+          h('p', {}, body),
           h(
             'div',
             { class: 'row' },
             h('button', { class: 'btn primary', onclick: () => this.cb.onCompare() }, '⇄ COMPARE AI BEHAVIOUR'),
-            h('button', { class: 'btn ghost', onclick: () => this.cb.onRetry() }, 'RETRY ROUTE'),
+            h('button', { class: 'btn ghost', onclick: () => this.cb.onRetry() }, 'RETRY (SAME PATCH)'),
             h('button', { class: 'btn ghost', onclick: () => this.cb.onRestart() }, 'RE-HACK'),
           ),
         ),

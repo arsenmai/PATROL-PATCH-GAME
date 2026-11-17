@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { LAB_LEVEL } from '../sim/level';
 import { ReplayRecorder, compareReplays, runReplay } from '../sim/replay';
+import { solve } from '../sim/solver';
 import type { Action, Patch } from '../sim/types';
 
 const patch: Patch = { guardId: 'G2', slot: 'onDetect', value: 'INVESTIGATE' };
@@ -31,9 +32,15 @@ describe('deterministic replay', () => {
   });
 
   it('original and patched simulations diverge on the same inputs', () => {
-    const c = compareReplays(LAB_LEVEL, route, patch);
+    // A vault-only heist, found by the solver on a copy of the level that has no other loot.
+    const vaultOnly = { ...LAB_LEVEL, artifacts: LAB_LEVEL.artifacts.filter((a) => a.id === 'core') };
+    const heist = solve(vaultOnly, patch).actions;
+
+    const c = compareReplays(LAB_LEVEL, heist, patch);
     expect(c.original.final.status).toBe('CAUGHT');
-    expect(c.patched.final.status).toBe('SUCCESS');
+    expect(c.original.final.taken).not.toContain('core');
+    expect(c.patched.final.status).toBe('ESCAPED');
+    expect(c.patched.final.loot).toBe(1000);
     expect(c.divergedAt).not.toBeNull();
     // Up to the divergence both worlds are bit-for-bit identical.
     for (let t = 0; t < c.divergedAt!; t++) {

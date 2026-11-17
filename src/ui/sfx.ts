@@ -27,6 +27,8 @@ export const sfx = {
   blocked: () => tone(90, 0.08, 'square', 0.03),
   click: () => tone(660, 0.05, 'sine', 0.04),
   patch: () => [520, 780, 1040].forEach((f, i) => tone(f, 0.12, 'sine', 0.05, undefined, i * 0.07)),
+  loot: () => [880, 1320].forEach((f, i) => tone(f, 0.1, 'triangle', 0.05, undefined, i * 0.06)),
+  curse: () => tone(220, 0.35, 'square', 0.04, 110, 0.12),
   detected: () => tone(880, 0.22, 'sawtooth', 0.05, 440),
   caught: () => tone(300, 0.6, 'sawtooth', 0.07, 60),
   success: () => [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.2, 'triangle', 0.06, undefined, i * 0.09)),

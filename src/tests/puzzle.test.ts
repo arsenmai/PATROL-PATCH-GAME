@@ -1,34 +1,57 @@
-import { describe, expect, it } from 'vitest';
-import { LAB_LEVEL } from '../sim/level';
+import { beforeAll, describe, expect, it } from 'vitest';
+import { LAB_LEVEL, LAB_PROVEN, totalLoot } from '../sim/level';
 import { allPatches } from '../sim/patch';
 import { runReplay } from '../sim/replay';
-import { solve } from '../sim/solver';
+import { solve, type Solution } from '../sim/solver';
+import type { Patch } from '../sim/types';
+
+const WINNING: Patch = { guardId: 'G2', slot: 'onDetect', value: 'INVESTIGATE' };
+const same = (a: Patch, b: Patch) => a.guardId === b.guardId && a.slot === b.slot && a.value === b.value;
 
 describe('puzzle validation (exhaustive solver)', () => {
-  it('the level is impossible with factory guard AI', () => {
-    expect(solve(LAB_LEVEL, null)).toBeNull();
+  let stock: Solution;
+  let patched: { patch: Patch; solution: Solution }[];
+
+  beforeAll(() => {
+    stock = solve(LAB_LEVEL, null);
+    patched = allPatches(LAB_LEVEL).map((patch) => ({ patch, solution: solve(LAB_LEVEL, patch) }));
+  }, 180_000);
+
+  it('with factory AI the vault is out of reach: best haul is the loose loot only', () => {
+    expect(stock.loot).toBe(LAB_PROVEN.withoutPatch);
+    expect(stock.taken).not.toContain('core');
+    expect(stock.taken).not.toContain('key');
   });
 
-  it('at least one patch makes it solvable, and not every patch does', () => {
-    const results = allPatches(LAB_LEVEL).map((p) => ({ p, solution: solve(LAB_LEVEL, p) }));
-    const winning = results.filter((r) => r.solution);
-    expect(winning.length).toBeGreaterThanOrEqual(1);
-    expect(winning.length).toBeLessThan(results.length);
+  it('exactly one of the six patches opens the vault', () => {
+    const openers = patched.filter((p) => p.solution.taken.includes('core'));
+    expect(openers).toHaveLength(1);
+    expect(same(openers[0].patch, WINNING)).toBe(true);
+    for (const p of patched) {
+      if (!same(p.patch, WINNING)) expect(p.solution.loot).toBe(LAB_PROVEN.withoutPatch);
+    }
   });
 
-  it('the solver route fails on original AI and succeeds on patched AI', () => {
-    const patch = { guardId: 'G2', slot: 'onDetect', value: 'INVESTIGATE' } as const;
-    const solution = solve(LAB_LEVEL, patch)!;
-    expect(solution).not.toBeNull();
-    expect(solution.actions).toContain('WAIT'); // GUARD_01 forces a timing decision
-    expect(runReplay(LAB_LEVEL, solution.actions, patch).final.status).toBe('SUCCESS');
-    expect(runReplay(LAB_LEVEL, solution.actions, null).final.status).toBe('CAUGHT');
+  it('greed has a price: even the perfect heist cannot take everything', () => {
+    const best = patched.find((p) => same(p.patch, WINNING))!.solution;
+    expect(best.loot).toBe(LAB_PROVEN.withBestPatch);
+    expect(best.loot).toBeLessThan(totalLoot(LAB_LEVEL));
+    expect(best.taken).not.toContain('servo'); // OVERCLOCK makes the vault run impossible
   });
 
-  it('rushing the shortest path gets the player caught even with the winning patch', () => {
-    const patch = { guardId: 'G2', slot: 'onDetect', value: 'INVESTIGATE' } as const;
-    const solution = solve(LAB_LEVEL, patch)!;
-    const rushed = solution.actions.filter((a) => a !== 'WAIT');
-    expect(runReplay(LAB_LEVEL, rushed, patch).final.status).not.toBe('SUCCESS');
+  it('the perfect heist replays to an escape with the patch and fails without it', () => {
+    const best = patched.find((p) => same(p.patch, WINNING))!.solution;
+    const withPatch = runReplay(LAB_LEVEL, best.actions, WINNING).final;
+    expect(withPatch.status).toBe('ESCAPED');
+    expect(withPatch.loot).toBe(LAB_PROVEN.withBestPatch);
+
+    const without = runReplay(LAB_LEVEL, best.actions, null).final;
+    expect(without.status).toBe('CAUGHT');
+  });
+
+  it('walking straight out is always possible, for £0', () => {
+    const r = runReplay(LAB_LEVEL, ['INTERACT'], null).final;
+    expect(r.status).toBe('ESCAPED');
+    expect(r.loot).toBe(0);
   });
 });

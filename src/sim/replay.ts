@@ -35,7 +35,7 @@ export interface Comparison {
 }
 
 const fingerprint = (s: GameState): string =>
-  `${s.status}|${s.player.x},${s.player.y}|` + s.guards.map((g) => `${g.pos.x},${g.pos.y},${g.facing},${g.state}`).join('|');
+  `${s.status}|${s.player.x},${s.player.y}|${s.loot}|` + s.guards.map((g) => `${g.pos.x},${g.pos.y},${g.facing},${g.state}`).join('|');
 
 /**
  * Counterfactual replay: same level, same inputs, the patch is the only difference.

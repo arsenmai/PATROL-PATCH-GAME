@@ -1,10 +1,17 @@
-import type { Decor, GuardDef, Level, Vec } from './types';
+import type { ArtifactDef, Decor, GuardDef, Level, Vec } from './types';
 
 /**
  * Parses an ASCII map.
  * '#' wall, '.' floor, 'P' player start, 'T' terminal (solid), 'D' vault door (floor).
  */
-export function parseLevel(name: string, rows: string[], guards: GuardDef[], decor: Decor[] = []): Level {
+export function parseLevel(
+  name: string,
+  rows: string[],
+  guards: GuardDef[],
+  loot: Omit<ArtifactDef, 'terminal'>[] = [],
+  decor: Decor[] = [],
+  terminalLoot: Omit<ArtifactDef, 'pos' | 'terminal'> | null = null,
+): Level {
   const width = rows[0].length;
   let start: Vec | null = null;
   let terminal: Vec | null = null;
@@ -24,7 +31,9 @@ export function parseLevel(name: string, rows: string[], guards: GuardDef[], dec
   });
 
   if (!start || !terminal) throw new Error('Level needs a player start (P) and a terminal (T)');
-  return { name, width, height: rows.length, tiles, start, terminal, door, guards, decor };
+  const artifacts: ArtifactDef[] = [...loot];
+  if (terminalLoot) artifacts.push({ ...terminalLoot, pos: terminal, terminal: true });
+  return { name, width, height: rows.length, tiles, start, terminal, door, guards, artifacts, decor };
 }
 
 /**
@@ -32,7 +41,8 @@ export function parseLevel(name: string, rows: string[], guards: GuardDef[], dec
  *
  * GUARD_01 walks a loop through the central lab and makes the approach a timing problem.
  * GUARD_02 is a sentry inside the vault, watching the only door.
- * The solver test proves the vault cannot be cracked with stock guard AI.
+ * Six prototypes are scattered around; four of them are wired to a countermeasure.
+ * The solver tests prove how much can be carried out with and without a patch.
  */
 export const LAB_LEVEL: Level = parseLevel(
   'SECTOR 7 // RESEARCH VAULT',
@@ -78,6 +88,13 @@ export const LAB_LEVEL: Level = parseLevel(
     },
   ],
   [
+    { id: 'shard', name: 'DATA SHARD', value: 100, curse: null, pos: { x: 1, y: 6 } },
+    { id: 'cryo', name: 'CRYO SAMPLE', value: 150, curse: null, pos: { x: 10, y: 5 } },
+    { id: 'chip', name: 'NEURAL CHIP', value: 250, curse: 'SENSOR_BOOST', pos: { x: 10, y: 10 } },
+    { id: 'servo', name: 'SERVO CORE', value: 300, curse: 'OVERCLOCK', pos: { x: 3, y: 3 } },
+    { id: 'key', name: 'MASTER KEY', value: 400, curse: 'ROLLBACK', pos: { x: 10, y: 1 } },
+  ],
+  [
     { type: 'camera', x: 4, y: 4 },
     { type: 'camera', x: 11, y: 4 },
     { type: 'camera', x: 0, y: 11 },
@@ -91,4 +108,13 @@ export const LAB_LEVEL: Level = parseLevel(
     { type: 'tank', x: 9, y: 6 },
     { type: 'tank', x: 4, y: 1 },
   ],
+  { id: 'core', name: 'CORE DATA', value: 1000, curse: 'LOCKDOWN' },
 );
+
+/**
+ * Results of the exhaustive solver for LAB_LEVEL, asserted by the test suite so they can never drift.
+ * Shown to the player on the result screen.
+ */
+export const LAB_PROVEN = { withoutPatch: 800, withBestPatch: 1900 } as const;
+
+export const totalLoot = (level: Level): number => level.artifacts.reduce((sum, a) => sum + a.value, 0);

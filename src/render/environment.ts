@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { DELTA, DIRS, add, isWalkable, tileAt } from '../sim/grid';
 import { findPath } from '../sim/pathfinding';
 import type { Level, Vec } from '../sim/types';
-import { COLORS } from './palette';
+import { COLORS, CURSE_COLOR } from './palette';
 
 export const WALL_H = 0.55;
 
@@ -10,7 +10,8 @@ export interface Environment {
   group: THREE.Group;
   /** Called every frame with elapsed seconds; drives the few ambient animations. */
   update(time: number): void;
-  setTerminalBreached(breached: boolean): void;
+  /** Hides stolen prototypes and marks the terminal as breached. */
+  setTaken(taken: readonly string[]): void;
 }
 
 /** Converts a tile coordinate to the world-space centre of that tile. */
@@ -173,6 +174,38 @@ export function buildEnvironment(level: Level): Environment {
   terminal.add(body, band, core, halo, terminalLight);
   group.add(terminal);
 
+  // Loose prototypes: a low plinth with a floating gem, tinted by the countermeasure it is wired to.
+  const gems = new Map<string, THREE.Group>();
+  const plinthMat = new THREE.MeshStandardMaterial({ color: 0x2a3552, metalness: 0.8, roughness: 0.3 });
+  for (const a of level.artifacts) {
+    if (a.terminal) continue;
+    const colour = CURSE_COLOR[a.curse ?? 'NONE'];
+    const holder = new THREE.Group();
+    holder.position.copy(tileToWorld(level, a.pos));
+    const plinth = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.3, 0.05, 8), plinthMat);
+    plinth.position.y = 0.03;
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.27, 0.014, 6, 24), glow(colour, 1.8));
+    rim.rotation.x = Math.PI / 2;
+    rim.position.y = 0.06;
+    const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.15 + a.value / 4000, 0), glow(colour, 2.2));
+    gem.name = 'gem';
+    gem.position.y = 0.5;
+    const light = new THREE.PointLight(colour, 2.2, 2.4, 1.6);
+    light.position.y = 0.6;
+    holder.add(plinth, rim, gem, light);
+    group.add(holder);
+    gems.set(a.id, holder);
+  }
+
+  // Extraction pad on the start tile.
+  const exitMat = new THREE.MeshBasicMaterial({ color: COLORS.green, transparent: true, opacity: 0.55, side: THREE.DoubleSide });
+  const exitPad = new THREE.Group();
+  exitPad.position.copy(tileToWorld(level, level.start, 0.013));
+  const frame = new THREE.Mesh(new THREE.RingGeometry(0.4, 0.46, 4, 1, Math.PI / 4), exitMat);
+  frame.rotation.x = -Math.PI / 2;
+  exitPad.add(frame);
+  group.add(exitPad);
+
   // Decorative props sitting on top of walls. They never affect the simulation.
   const blinkMat = glow(COLORS.red, 2.5);
   const propDark = new THREE.MeshStandardMaterial({ color: 0x2a3552, metalness: 0.7, roughness: 0.4 });
@@ -244,8 +277,20 @@ export function buildEnvironment(level: Level): Environment {
       doorMat.emissiveIntensity = 2.2 + Math.sin(time * 3) * 0.5;
       blinkMat.emissiveIntensity = Math.sin(time * 4) > 0.2 ? 2.8 : 0.2;
       cameras.forEach((c, i) => (c.rotation.y = Math.sin(time * 0.5 + i * 1.7) * 0.9));
+      let n = 0;
+      for (const holder of gems.values()) {
+        const gem = holder.getObjectByName('gem');
+        if (gem) {
+          gem.rotation.y = time * 1.4 + n;
+          gem.position.y = 0.5 + Math.sin(time * 2.2 + n) * 0.05;
+        }
+        n++;
+      }
+      exitMat.opacity = 0.45 + Math.sin(time * 3) * 0.2;
     },
-    setTerminalBreached(breached) {
+    setTaken(taken) {
+      for (const [id, holder] of gems) holder.visible = !taken.includes(id);
+      const breached = level.artifacts.some((a) => a.terminal && taken.includes(a.id));
       const c = breached ? COLORS.green : COLORS.cyan;
       screenMat.emissive.setHex(c);
       terminalLight.color.setHex(c);

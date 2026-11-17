@@ -3,15 +3,16 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { CURSES, guardMods } from '../sim/curses';
 import { visibleTiles } from '../sim/detection';
 import type { GameState, Level } from '../sim/types';
 import { FACING_ANGLE, createGuardModel, createPlayerModel, type GuardModel, type PlayerModel } from './characters';
 import { buildEnvironment, tileToWorld, type Environment } from './environment';
-import { COLORS, STATE_COLOR, css } from './palette';
+import { COLORS, CURSE_COLOR, STATE_COLOR, css } from './palette';
 
 /** Duration of the move tween. Purely cosmetic: the simulation has already advanced. */
 export const MOVE_MS = 170;
-const MAX_CONE_TILES = 40;
+const MAX_CONE_TILES = 72;
 
 interface Tween {
   from: THREE.Vector3;
@@ -39,6 +40,7 @@ export class LabScene {
   private readonly guards: GuardModel[] = [];
   private readonly cones: { tiles: THREE.Mesh[]; material: THREE.MeshBasicMaterial }[] = [];
   private readonly labels: HTMLDivElement[] = [];
+  private readonly pins: { el: HTMLDivElement; at: THREE.Vector3; id: string | null }[] = [];
   private readonly labelLayer: HTMLDivElement;
   private readonly selection: THREE.Mesh;
   private readonly clock = new THREE.Clock();
@@ -95,6 +97,22 @@ export class LabScene {
       this.labels.push(label);
     }
 
+    // Static pins: one price tag per prototype, plus the exit.
+    for (const a of level.artifacts) {
+      const el = document.createElement('div');
+      el.className = 'loot-label';
+      el.style.setProperty('--c', css(CURSE_COLOR[a.curse ?? 'NONE']));
+      el.innerHTML = `<b>£${a.value}</b>${a.curse ? `<span>⚠ ${CURSES[a.curse].name}</span>` : '<span>safe</span>'}`;
+      el.title = `${a.name}${a.curse ? ' — ' + CURSES[a.curse].summary : ''}`;
+      this.labelLayer.appendChild(el);
+      this.pins.push({ el, at: tileToWorld(level, a.pos, a.terminal ? 1.75 : 1.0), id: a.id });
+    }
+    const exitEl = document.createElement('div');
+    exitEl.className = 'loot-label exit';
+    exitEl.innerHTML = '<b>EXIT</b>';
+    this.labelLayer.appendChild(exitEl);
+    this.pins.push({ el: exitEl, at: tileToWorld(level, level.start, 0.1), id: null });
+
     this.selection = new THREE.Mesh(
       new THREE.RingGeometry(0.42, 0.47, 32),
       new THREE.MeshBasicMaterial({ color: COLORS.green, transparent: true, opacity: 0.9 }),
@@ -119,8 +137,9 @@ export class LabScene {
     this.loop();
   }
 
+  /** Time-based on purpose: a slow frame rate must never make the game swallow key presses. */
   get isAnimating(): boolean {
-    return this.animating;
+    return this.animating && performance.now() - this.tweenStart < MOVE_MS;
   }
 
   /** Shows a simulation state. With `instant` the tween is skipped (restart, phase change). */
@@ -144,9 +163,11 @@ export class LabScene {
     this.animating = !instant;
     if (instant) this.applyTweens(1);
 
-    const detected = state.guards.some((g) => g.seesPlayer) || state.status === 'CAUGHT';
+    const detected = state.guards.some((g) => g.seesPlayer) || state.status === 'CAUGHT' || state.status === 'TRAPPED';
     this.player.accent.emissive.setHex(detected ? COLORS.red : COLORS.green);
-    this.env.setTerminalBreached(state.status === 'SUCCESS');
+    this.env.setTaken(state.taken);
+    for (const pin of this.pins) pin.el.classList.toggle('gone', pin.id !== null && state.taken.includes(pin.id));
+    const { rangeBonus } = guardMods(state);
 
     state.guards.forEach((g, i) => {
       const def = this.level.guards[i];
@@ -157,7 +178,7 @@ export class LabScene {
       const cone = this.cones[i];
       cone.material.color.setHex(g.seesPlayer ? COLORS.red : color);
       cone.material.opacity = g.seesPlayer ? 0.42 : 0.2;
-      const tiles = visibleTiles(this.level, g.pos, g.facing, def.range);
+      const tiles = visibleTiles(this.level, g.pos, g.facing, def.range + rangeBonus);
       cone.tiles.forEach((mesh, t) => {
         mesh.visible = t < tiles.length;
         if (mesh.visible) mesh.position.copy(tileToWorld(this.level, tiles[t], 0.02 + i * 0.004));
@@ -273,5 +294,11 @@ export class LabScene {
       const y = (-this.projected.y * 0.5 + 0.5) * h;
       this.labels[i].style.transform = `translate(-50%, -100%) translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
     });
+    for (const pin of this.pins) {
+      this.projected.copy(pin.at).project(this.camera);
+      const x = (this.projected.x * 0.5 + 0.5) * w;
+      const y = (-this.projected.y * 0.5 + 0.5) * h;
+      pin.el.style.transform = `translate(-50%, -100%) translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
+    }
   }
 }
