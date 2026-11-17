@@ -1,3 +1,4 @@
+import { surgePeriod } from './curses';
 import { eq } from './grid';
 import { createInitialState, interactionAt, step } from './simulation';
 import type { Action, Dir, GameState, GuardState, Level, Patch, Vec } from './types';
@@ -7,8 +8,8 @@ const FACING: Record<Dir, number> = { N: 0, E: 1, S: 2, W: 3 };
 const FSM: Record<GuardState, number> = { PATROL: 0, INVESTIGATE: 1, CHASE: 2, RETURN: 3 };
 
 /**
- * Compact fingerprint of everything that can influence the future of a state, except the lockdown timer
- * (handled separately by dominance) and the absolute turn number.
+ * Compact fingerprint of everything that can influence the future of a state, except the mission clock
+ * (handled separately by dominance). The turn number only matters as a phase of the speed surge.
  */
 export function stateKey(level: Level, s: GameState): string {
   const cell = (p: Vec | null): number => (p ? p.y * level.width + p.x + 1 : 0);
@@ -16,7 +17,8 @@ export function stateKey(level: Level, s: GameState): string {
   level.artifacts.forEach((a, i) => {
     if (s.taken.includes(a.id)) mask |= 1 << i;
   });
-  const codes: number[] = [cell(s.player), mask];
+  const period = surgePeriod(s.curses);
+  const codes: number[] = [cell(s.player), mask | ((period ? s.turn % period : 0) << 8)];
   for (const g of s.guards) {
     codes.push(
       cell(g.pos),
@@ -40,19 +42,19 @@ export interface Solution {
 
 /**
  * Exhaustive breadth-first search over the full game state space, driven by the real `step` function.
- * Returns the richest possible escape. Leaving at once with £0 is always possible.
+ * Returns the richest possible escape (loot 0 with a lone INTERACT if nothing can be carried out).
  *
  * Two things keep it tractable:
  *  - states are deduplicated by a compact fingerprint;
- *  - a state with a running lockdown is only revisited if it has strictly more time left than before
+ *  - a state is only revisited if it has strictly more time left on the mission clock than before
  *    (more time is never worse, so the slower copy is dominated).
  */
-export function solve(level: Level, patch: Patch | null, maxTurns = 150): Solution {
+export function solve(level: Level, patch: Patch | null): Solution {
   const start = createInitialState(level, patch);
   const parents: number[] = [-1];
   const via: number[] = [-1];
   const states: (GameState | null)[] = [start];
-  const timeLeft = (s: GameState): number => (s.lockdownAt === null ? 1e9 : s.lockdownAt - s.turn);
+  const timeLeft = (s: GameState): number => s.deadline - s.turn;
   const seen = new Map<string, number>([[stateKey(level, start), timeLeft(start)]]);
   let best = { index: 0, loot: 0, taken: [] as string[] };
 
@@ -60,7 +62,6 @@ export function solve(level: Level, patch: Patch | null, maxTurns = 150): Soluti
     const state = states[head] as GameState;
     states[head] = null; // expanded: release it, only the frontier stays in memory
     if (eq(state.player, level.start) && state.loot > best.loot) best = { index: head, loot: state.loot, taken: state.taken };
-    if (state.turn >= maxTurns) continue;
 
     const canSteal = interactionAt(level, state)?.kind === 'STEAL';
     for (let a = 0; a < ACTIONS.length; a++) {

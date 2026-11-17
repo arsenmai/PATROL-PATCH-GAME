@@ -34,14 +34,15 @@ function beginInvestigation(g: Guard, at: Vec): void {
   g.sweepLeft = g.rules.onInvestigateEnd === 'SWEEP' ? SWEEP_TURNS : 0;
 }
 
+/** Shared security parameters for one turn, produced by the active curses. */
 export interface GuardMods {
-  /** Extra tiles per turn in every state (OVERCLOCK). */
+  /** Extra tiles every guard may move this turn. */
   speedBonus: number;
-  /** Extra detection range (SENSOR_BOOST). */
-  rangeBonus: number;
+  /** Multiplier on every guard's detection range. */
+  rangeMultiplier: number;
 }
 
-export const NO_MODS: GuardMods = { speedBonus: 0, rangeBonus: 0 };
+export const NO_MODS: GuardMods = { speedBonus: 0, rangeMultiplier: 1 };
 
 /** One tile of movement (or one beat of waiting) in the current state. Returns false when the turn is over for this guard. */
 function act(level: Level, def: GuardDef, g: Guard, player: Vec, range: number, turn: number, events: GameEvent[]): boolean {
@@ -112,7 +113,7 @@ export function moveGuard(
 ): boolean {
   const chasing = g.state === 'CHASE';
   const speed = (chasing ? CHASE_SPEED : 1) + mods.speedBonus;
-  const range = def.range + mods.rangeBonus;
+  const range = def.range * mods.rangeMultiplier;
 
   for (let i = 0; i < speed; i++) {
     const keepGoing = act(level, def, g, player, range, turn, events);
@@ -136,7 +137,7 @@ export function senseGuard(
   events: GameEvent[],
   mods: GuardMods = NO_MODS,
 ): void {
-  const sees = canSee(level, g.pos, g.facing, def.range + mods.rangeBonus, player);
+  const sees = canSee(level, g.pos, g.facing, def.range * mods.rangeMultiplier, player);
 
   if (sees && !g.seesPlayer) events.push({ turn, kind: 'DETECTED', guardId: g.id, text: `${g.id} spotted the intruder` });
   if (!sees && g.seesPlayer) events.push({ turn, kind: 'LOST', guardId: g.id, text: `${g.id} lost visual contact` });

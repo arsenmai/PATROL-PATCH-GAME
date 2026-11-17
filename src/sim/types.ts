@@ -45,18 +45,18 @@ export interface GuardDef {
   range: number;
 }
 
-/** A security countermeasure wired to a prototype. Stealing the prototype triggers it for the rest of the run. */
-export type CurseId = 'OVERCLOCK' | 'SENSOR_BOOST' | 'ROLLBACK' | 'LOCKDOWN';
+/** The curse bound to an artifact. Stealing the artifact changes one museum security rule for the rest of the run. */
+export type CurseId = 'SIGHT' | 'PURSUIT' | 'HOURGLASS';
 
 export interface ArtifactDef {
   id: string;
   name: string;
-  /** Loot value in pounds. */
+  /** Loot value in points. */
   value: number;
   curse: CurseId | null;
   pos: Vec;
-  /** The vault terminal is solid and is hacked from an adjacent tile; other loot is grabbed from its own tile. */
-  terminal?: boolean;
+  /** A sealed display case is solid and is opened from an adjacent tile; other artifacts are grabbed from their own tile. */
+  sealed?: boolean;
 }
 
 export interface Decor {
@@ -69,7 +69,7 @@ export interface Level {
   name: string;
   width: number;
   height: number;
-  /** Normalised rows: '#' wall, '.' floor, 'T' terminal. */
+  /** Normalised rows: '#' wall, '.' floor, 'T' sealed display case. */
   tiles: string[];
   /** Player start, which is also the extraction point. */
   start: Vec;
@@ -78,6 +78,8 @@ export interface Level {
   guards: GuardDef[];
   artifacts: ArtifactDef[];
   decor: Decor[];
+  /** Mission length in turns (the turn-based equivalent of a countdown timer). */
+  turnLimit: number;
 }
 
 export interface Guard {
@@ -97,7 +99,7 @@ export interface Guard {
   hacked: boolean;
 }
 
-export type Status = 'PLAYING' | 'CAUGHT' | 'TRAPPED' | 'ESCAPED';
+export type Status = 'PLAYING' | 'CAUGHT' | 'TIMEOUT' | 'ESCAPED';
 
 export interface GameState {
   turn: number;
@@ -108,13 +110,13 @@ export interface GameState {
   loot: number;
   /** Ids of stolen artifacts, in the order they were taken. */
   taken: string[];
-  /** Countermeasures triggered so far. */
+  /** Curses triggered so far. They change shared security parameters, never a guard's rules. */
   curses: CurseId[];
-  /** Turn on which the exit seals, once LOCKDOWN has been triggered. */
-  lockdownAt: number | null;
+  /** Turn on which the museum locks down. Starts at level.turnLimit; the Hourglass pulls it closer. */
+  deadline: number;
 }
 
-export type EventKind = 'DETECTED' | 'LOST' | 'STATE' | 'CAUGHT' | 'TRAPPED' | 'ESCAPED' | 'LOOT' | 'CURSE' | 'BLOCKED';
+export type EventKind = 'DETECTED' | 'LOST' | 'STATE' | 'CAUGHT' | 'TIMEOUT' | 'ESCAPED' | 'LOOT' | 'CURSE' | 'BLOCKED';
 
 export interface GameEvent {
   turn: number;
