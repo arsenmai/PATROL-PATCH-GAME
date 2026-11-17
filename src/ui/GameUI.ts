@@ -48,6 +48,7 @@ export class GameUI {
     panel: HTMLElement,
     private readonly cb: UICallbacks,
   ) {
+    this.probeTitleArt();
     this.primaryBtn = h('button', { class: 'btn primary wide', onclick: () => cb.onInfiltrate() }, 'START HEIST ▸');
     this.restartBtn = h('button', { class: 'btn ghost wide', onclick: () => cb.onRestart() }, '↺ RESTART / RE-HACK');
     const muteBtn = h('button', { class: 'icon-btn', title: 'Toggle sound' }, '♪');
@@ -165,11 +166,24 @@ export class GameUI {
     while (this.logEl.children.length > 40) this.logEl.lastChild?.remove();
   }
 
+  /** Optional key art: public/title.jpg or title.png. Probed once; the menu looks fine without it. */
+  private titleArt: string | null = null;
+  private probeTitleArt(): void {
+    for (const file of ['title.jpg', 'title.png']) {
+      const img = new Image();
+      img.onload = () => {
+        this.titleArt ??= file;
+        this.root.querySelector<HTMLElement>('.overlay.menu')?.style.setProperty('--art', `url(${this.titleArt})`);
+      };
+      img.src = file;
+    }
+  }
+
   showMenu(): void {
     this.setOverlay(
       h(
         'div',
-        { class: 'overlay menu' },
+        { class: 'overlay menu', style: this.titleArt ? `--art:url(${this.titleArt})` : undefined },
         h(
           'div',
           { class: 'menu-card' },

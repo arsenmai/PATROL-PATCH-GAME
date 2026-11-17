@@ -6,7 +6,15 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { CURSES, sightMultiplier } from '../sim/curses';
 import { visibleTiles } from '../sim/detection';
 import type { GameState, Level } from '../sim/types';
-import { FACING_ANGLE, createGuardModel, createPlayerModel, type GuardModel, type PlayerModel } from './characters';
+import {
+  FACING_ANGLE,
+  applyGuardTemplate,
+  createGuardModel,
+  createPlayerModel,
+  loadGuardTemplate,
+  type GuardModel,
+  type PlayerModel,
+} from './characters';
 import { buildEnvironment, tileToWorld, type Environment } from './environment';
 import { COLORS, CURSE_COLOR, STATE_COLOR, css } from './palette';
 
@@ -111,6 +119,11 @@ export class LabScene {
     exitEl.innerHTML = '<b>EXTRACTION</b>';
     this.labelLayer.appendChild(exitEl);
     this.pins.push({ el: exitEl, at: tileToWorld(level, level.start, 0), id: null, below: true });
+
+    // Optional authored robot model; the primitive one stays if the file is not there.
+    void loadGuardTemplate().then((template) => {
+      if (template && !this.disposed) this.guards.forEach((g) => applyGuardTemplate(g, template));
+    });
 
     this.selection = new THREE.Mesh(
       new THREE.RingGeometry(0.42, 0.47, 32),

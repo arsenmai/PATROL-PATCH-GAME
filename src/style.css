@@ -742,7 +742,9 @@ kbd {
 }
 
 .overlay.menu {
-  background: radial-gradient(ellipse at 50% 40%, rgba(27, 20, 66, 0.82), rgba(3, 5, 10, 0.94) 70%);
+  background:
+    radial-gradient(ellipse at 50% 40%, rgba(27, 20, 66, 0.72), rgba(3, 5, 10, 0.92) 70%),
+    var(--art, none) center / cover no-repeat;
 }
 
 .menu-card {
