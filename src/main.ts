@@ -1,16 +1,25 @@
 import './style.css';
 import { LabScene, MOVE_MS } from './render/scene';
-import { LAB_LEVEL } from './sim/level';
+import { buildDaily, dailyFor, type DailyHeist, type Par } from './sim/daily';
+import { LAB_LEVEL, LAB_PROVEN } from './sim/level';
 import { PatchSystem } from './sim/patch';
 import { ReplayRecorder, compareReplays } from './sim/replay';
 import { createInitialState, step } from './sim/simulation';
-import type { Action, GameState } from './sim/types';
+import type { Action, GameState, Level } from './sim/types';
 import { AIEditor } from './ui/AIEditor';
 import { CompareView } from './ui/CompareView';
 import { GameUI } from './ui/GameUI';
 import { sfx } from './ui/sfx';
 
 type Phase = 'MENU' | 'BRIEFING' | 'HACK' | 'PLAY' | 'RESULT' | 'COMPARE';
+
+/** One playable museum: the level, what the solver proved about it, and a key for the local best score. */
+export interface Stage {
+  level: Level;
+  par: Par;
+  key: string;
+  daily: DailyHeist | null;
+}
 
 const KEYS: Record<string, Action> = {
   KeyW: 'N',
@@ -25,18 +34,26 @@ const KEYS: Record<string, Action> = {
   KeyE: 'INTERACT',
 };
 
+const classicStage = (): Stage => ({ level: LAB_LEVEL, par: LAB_PROVEN, key: 'classic', daily: null });
+
+function dailyStage(): Stage {
+  const heist = dailyFor(new Date());
+  return { level: buildDaily(heist), par: heist.par, key: `daily-${heist.seed}`, daily: heist };
+}
+
 /**
  * Application controller: owns the phase machine and wires input → simulation → presentation.
  * All game rules live in src/sim; this file never decides an outcome.
  */
 class Game {
-  private readonly level = LAB_LEVEL;
-  private readonly patches = new PatchSystem(this.level);
-  private readonly recorder = new ReplayRecorder();
-  private readonly scene: LabScene;
-  private readonly editor: AIEditor;
+  private readonly stageEl: HTMLElement;
   private readonly ui: GameUI;
-  private state: GameState = createInitialState(this.level);
+  private readonly recorder = new ReplayRecorder();
+  private stage: Stage = classicStage();
+  private patches = new PatchSystem(this.stage.level);
+  private scene: LabScene;
+  private editor: AIEditor;
+  private state: GameState = createInitialState(this.stage.level);
   private phase: Phase = 'MENU';
   private compareView: CompareView | null = null;
   private resultTimer = 0;
@@ -44,16 +61,14 @@ class Game {
   private queued: Action | null = null;
 
   constructor(root: HTMLElement) {
-    const stage = root.querySelector<HTMLElement>('#stage')!;
+    this.stageEl = root.querySelector<HTMLElement>('#stage')!;
     const panel = root.querySelector<HTMLElement>('#panel')!;
 
-    this.scene = new LabScene(stage, this.level);
-    this.editor = new AIEditor(this.level, this.patches, {
-      onSelectGuard: (id) => this.phase === 'HACK' && this.scene.setSelectedGuard(id),
-      onPatchChanged: () => this.resetWorld(),
-    });
-    this.ui = new GameUI(root, this.level, stage, panel, this.editor.el, {
-      onStart: () => this.setPhase('BRIEFING'),
+    this.ui = new GameUI(root, this.stageEl, panel, {
+      onStart: (mode) => {
+        this.load(mode === 'daily' ? dailyStage() : classicStage());
+        this.setPhase('BRIEFING');
+      },
       onBriefingDone: () => this.setPhase('HACK'),
       onInfiltrate: () => this.setPhase('PLAY'),
       onRestart: () => {
@@ -62,17 +77,44 @@ class Game {
       },
       onRetry: () => this.setPhase('PLAY'),
       onCompare: () => this.setPhase('COMPARE'),
+      onMenu: () => this.setPhase('MENU'),
       onMute: () => sfx.toggleMute(),
     });
+
+    this.scene = new LabScene(this.stageEl, this.stage.level);
+    this.editor = this.makeEditor();
+    this.ui.setStage(this.stage, this.editor.el, dailyFor(new Date()).seed);
 
     window.addEventListener('keydown', this.onKey);
     this.resetWorld();
     this.setPhase('MENU');
   }
 
+  private makeEditor(): AIEditor {
+    return new AIEditor(this.stage.level, this.patches, {
+      onSelectGuard: (id) => this.phase === 'HACK' && this.scene.setSelectedGuard(id),
+      onPatchChanged: () => this.resetWorld(),
+    });
+  }
+
+  /** Switches museum: rebuilds everything that is bound to a level, and nothing else. */
+  private load(stage: Stage): void {
+    if (stage.key === this.stage.key) {
+      this.patches.reset();
+      return;
+    }
+    this.scene.dispose();
+    this.stage = stage;
+    this.patches = new PatchSystem(stage.level);
+    this.scene = new LabScene(this.stageEl, stage.level);
+    this.editor = this.makeEditor();
+    this.ui.setStage(stage, this.editor.el, dailyFor(new Date()).seed);
+    this.resetWorld();
+  }
+
   /** Fresh world using whatever patch is currently applied. */
   private resetWorld(): void {
-    this.state = createInitialState(this.level, this.patches.current);
+    this.state = createInitialState(this.stage.level, this.patches.current);
     this.scene.setState(this.state, true);
     this.ui.update(this.state);
   }
@@ -101,7 +143,6 @@ class Game {
         this.ui.setPhase('HACK');
         this.ui.clearLog();
         this.ui.log('Uplink established. Guard firmware is writable.');
-        this.ui.update(this.state);
         this.editor.setLiveState(null);
         this.editor.setLocked(false);
         this.scene.setSelectedGuard(this.editor.selectedGuard);
@@ -129,8 +170,8 @@ class Game {
 
       case 'COMPARE': {
         sfx.click();
-        const comparison = compareReplays(this.level, this.recorder.actions, this.patches.current);
-        this.compareView = new CompareView(this.level, comparison, this.patches.current, this.recorder.actions.length, () =>
+        const comparison = compareReplays(this.stage.level, this.recorder.actions, this.patches.current);
+        this.compareView = new CompareView(this.stage.level, comparison, this.patches.current, this.recorder.actions.length, () =>
           this.setPhase('RESULT'),
         );
         this.ui.setOverlay(this.compareView.el);
@@ -142,8 +183,7 @@ class Game {
   private readonly onKey = (e: KeyboardEvent): void => {
     if (e.repeat && e.code === 'KeyE') return;
     if (this.phase === 'PLAY' && e.code === 'KeyR') {
-      this.patches.reset();
-      this.setPhase('HACK');
+      this.setPhase('PLAY');
       return;
     }
     const action = KEYS[e.code];
@@ -155,8 +195,7 @@ class Game {
   };
 
   private act(action: Action): void {
-    const before = this.state;
-    const result = step(this.level, before, action);
+    const result = step(this.stage.level, this.state, action);
     if (!result.advanced) {
       sfx.blocked();
       return;
@@ -179,7 +218,7 @@ class Game {
     } else sfx.step();
 
     if (happened('LOOT')) {
-      const stolen = this.level.artifacts.find((a) => a.id === this.state.taken[this.state.taken.length - 1]);
+      const stolen = this.stage.level.artifacts.find((a) => a.id === this.state.taken[this.state.taken.length - 1]);
       if (stolen) this.ui.toastArtifact(stolen);
     }
 

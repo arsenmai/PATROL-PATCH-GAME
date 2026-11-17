@@ -1,16 +1,17 @@
 import { CURSES, turnsLeft, turnsToSurge } from '../sim/curses';
-import { LAB_PROVEN } from '../sim/level';
 import type { ArtifactDef, GameEvent, GameState, Level } from '../sim/types';
+import type { Stage } from '../main';
 import { CURSE_COLOR, css } from '../render/palette';
 import { h } from './dom';
 
 export interface UICallbacks {
-  onStart(): void;
+  onStart(mode: 'daily' | 'classic'): void;
   onBriefingDone(): void;
   onInfiltrate(): void;
   onRestart(): void;
   onRetry(): void;
   onCompare(): void;
+  onMenu(): void;
   onMute(): boolean;
 }
 
@@ -32,13 +33,19 @@ export class GameUI {
   private readonly restartBtn: HTMLButtonElement;
   private overlay: HTMLElement | null = null;
   private toastTimer = 0;
+  private readonly editorSlot = h('div', {});
+  private readonly placeEl = h('p', {}, '');
+  private stage!: Stage;
+  private todaySeed = 0;
+
+  private get level(): Level {
+    return this.stage.level;
+  }
 
   constructor(
     private readonly root: HTMLElement,
-    private readonly level: Level,
     stage: HTMLElement,
     panel: HTMLElement,
-    editorEl: HTMLElement,
     private readonly cb: UICallbacks,
   ) {
     this.primaryBtn = h('button', { class: 'btn primary wide', onclick: () => cb.onInfiltrate() }, 'START HEIST ▸');
@@ -68,11 +75,19 @@ export class GameUI {
     );
 
     panel.append(
-      h('header', { class: 'brand' }, h('div', {}, h('h1', {}, 'RULE', h('em', {}, 'HEIST')), h('p', {}, level.name)), muteBtn),
-      editorEl,
+      h('header', { class: 'brand' }, h('div', {}, h('h1', {}, 'RULE', h('em', {}, 'HEIST')), this.placeEl), muteBtn),
+      this.editorSlot,
       h('div', { class: 'panel-actions' }, this.primaryBtn, this.restartBtn),
       h('section', { class: 'log-wrap' }, h('header', { class: 'panel-title' }, h('span', {}, 'EVENT LOG')), this.logEl),
     );
+  }
+
+  /** Points the UI at a museum. Called once at start-up and again whenever the player switches mode. */
+  setStage(stage: Stage, editorEl: HTMLElement, todaySeed: number): void {
+    this.stage = stage;
+    this.todaySeed = todaySeed;
+    this.placeEl.textContent = stage.level.name;
+    this.editorSlot.replaceChildren(editorEl);
   }
 
   setPhase(phase: 'HACK' | 'PLAY' | 'IDLE'): void {
@@ -80,7 +95,7 @@ export class GameUI {
     this.restartBtn.style.display = phase === 'PLAY' ? '' : 'none';
     this.hintEl.innerHTML =
       phase === 'PLAY'
-        ? '<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move · <kbd>Space</kbd> wait · <kbd>E</kbd> steal / extract · <kbd>R</kbd> restart · scroll to zoom'
+        ? '<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move · <kbd>Space</kbd> wait · <kbd>E</kbd> steal / extract · <kbd>R</kbd> retry · scroll to zoom'
         : phase === 'HACK'
           ? 'Pick a guard, stage one rule change, apply it, then start the heist. Each tag shows an artifact’s value and its curse.'
           : '';
@@ -168,7 +183,12 @@ export class GameUI {
             h('li', {}, h('b', {}, '2'), 'Every artifact you steal curses the museum.'),
             h('li', {}, h('b', {}, '3'), 'Reach the extraction point to keep your loot.'),
           ),
-          h('button', { class: 'btn primary big', onclick: () => this.cb.onStart() }, 'START HEIST'),
+          h(
+            'div',
+            { class: 'menu-actions' },
+            h('button', { class: 'btn primary big', onclick: () => this.cb.onStart('daily') }, `HEIST OF THE DAY  #${this.todaySeed}`),
+            h('button', { class: 'btn ghost big', onclick: () => this.cb.onStart('classic') }, 'CLASSIC MUSEUM'),
+          ),
           h('p', { class: 'foot' }, 'WASD move · Space wait · E steal / extract'),
         ),
       ),
@@ -206,7 +226,7 @@ export class GameUI {
           h(
             'p',
             { class: 'warn-line' },
-            `Before you go in, you may rewrite one rule in one guard’s AI. Choose well: with factory AI, ${LAB_PROVEN.withoutPatch} is provably the most anyone can take.`,
+            `Before you go in, you may rewrite one rule in one guard’s AI. Choose well: with factory AI, ${this.stage.par.withoutPatch} is provably the most anyone can take here — the right hack makes ${this.stage.par.withBestPatch} possible.`,
           ),
           h('button', { class: 'btn primary big', onclick: () => this.cb.onBriefingDone() }, 'OPEN GUARD AI EDITOR ▸'),
         ),
@@ -217,15 +237,46 @@ export class GameUI {
   showResult(state: GameState): void {
     const win = state.status === 'ESCAPED';
     const total = this.level.artifacts.length;
-    const perfect = win && state.taken.length === total;
+    const { par, daily, key } = this.stage;
+    const perfect = win && state.loot >= par.withBestPatch;
+
+    // Personal best lives in this browser only; the game works the same without it.
+    let best: { loot: number; turns: number } | null = null;
+    let improved = false;
+    try {
+      best = JSON.parse(localStorage.getItem(`ruleheist:${key}`) ?? 'null');
+      if (win && (!best || state.loot > best.loot || (state.loot === best.loot && state.turn < best.turns))) {
+        best = { loot: state.loot, turns: state.turn };
+        improved = true;
+        localStorage.setItem(`ruleheist:${key}`, JSON.stringify(best));
+      }
+    } catch {
+      best = null;
+    }
 
     const reason =
       state.status === 'TIMEOUT' ? 'The museum locked down around you.' : state.status === 'CAUGHT' ? `Caught on turn ${state.turn}.` : '';
-    const nudge = perfect
-      ? `A perfect heist, with ${turnsLeft(state)} turns to spare. Can you do it faster?`
-      : win
-        ? `${total - state.taken.length} artifact${total - state.taken.length > 1 ? 's' : ''} still in the museum. All ${total} is proven possible.`
-        : 'Everything you were carrying stays in the museum.';
+    const nudge = !win
+      ? 'Everything you were carrying stays in the museum.'
+      : perfect
+        ? state.turn <= par.bestTurns
+          ? 'A perfect heist at par. This is provably the best possible run.'
+          : `Everything stolen. Par is ${par.bestTurns} turns — you took ${state.turn}.`
+        : `${total - state.taken.length} artifact${total - state.taken.length > 1 ? 's' : ''} left behind. All ${total} is proven possible with the right hack.`;
+
+    const share = `RULE HEIST ${daily ? '#' + daily.seed : 'classic'} — ${win ? `${state.taken.length}/${total} artifacts · ${state.loot} loot · ${state.turn} turns` : 'caught'} (par ${par.withBestPatch} in ${par.bestTurns})`;
+    const shareBtn = h('button', { class: 'btn ghost' }, 'COPY RESULT');
+    shareBtn.addEventListener('click', () => {
+      const done = (ok: boolean) => (shareBtn.textContent = ok ? 'COPIED ✓' : share);
+      try {
+        navigator.clipboard.writeText(share).then(
+          () => done(true),
+          () => done(false),
+        );
+      } catch {
+        done(false);
+      }
+    });
 
     this.setOverlay(
       h(
@@ -245,11 +296,19 @@ export class GameUI {
           ),
           h('p', {}, [reason, nudge].filter(Boolean).join(' ')),
           h(
+            'p',
+            { class: 'par-line' },
+            `Par: ${par.withBestPatch} loot in ${par.bestTurns} turns`,
+            best ? `  ·  Your best: ${best.loot} in ${best.turns}${improved ? '  ★ new' : ''}` : '',
+          ),
+          h(
             'div',
             { class: 'row' },
             h('button', { class: 'btn primary', onclick: () => this.cb.onRetry() }, '↺ RETRY'),
             h('button', { class: 'btn ghost', onclick: () => this.cb.onRestart() }, 'CHANGE HACK'),
-            h('button', { class: 'btn ghost', onclick: () => this.cb.onCompare() }, '⇄ COMPARE AI BEHAVIOUR'),
+            h('button', { class: 'btn ghost', onclick: () => this.cb.onCompare() }, '⇄ COMPARE AI'),
+            shareBtn,
+            h('button', { class: 'btn ghost', onclick: () => this.cb.onMenu() }, 'MENU'),
           ),
         ),
       ),

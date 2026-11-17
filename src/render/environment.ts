@@ -82,7 +82,7 @@ export function buildEnvironment(level: Level): Environment {
   // Glowing sub-floor: visible only through the seams between floor plates.
   const sub = new THREE.Mesh(
     new THREE.PlaneGeometry(level.width, level.height),
-    new THREE.MeshBasicMaterial({ color: 0x0b3a66 }),
+    new THREE.MeshBasicMaterial({ color: 0x4a3410 }),
   );
   sub.rotation.x = -Math.PI / 2;
   sub.position.y = -0.03;
@@ -91,7 +91,7 @@ export function buildEnvironment(level: Level): Environment {
   // Floor plates.
   const floorMesh = new THREE.InstancedMesh(
     new THREE.BoxGeometry(0.94, 0.08, 0.94),
-    new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.75, roughness: 0.38 }),
+    new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.55, roughness: 0.22 }),
     floors.length,
   );
   const tint = new THREE.Color();
@@ -128,30 +128,40 @@ export function buildEnvironment(level: Level): Environment {
   });
   group.add(wallMesh, capMesh);
 
-  // Neon wall panels: one strip wherever a wall faces a walkable tile.
-  const strips: { pos: THREE.Vector3; rotY: number; purple: boolean }[] = [];
+  // Wall dressing: a brass skirting line wherever a wall faces a walkable tile, and a framed painting on some of them.
+  const faces: { pos: THREE.Vector3; rotY: number; painted: boolean; hue: number }[] = [];
   for (const w of walls) {
     for (const d of DIRS) {
       if (!isWalkable(level, add(w, DELTA[d]))) continue;
-      const pos = tileToWorld(level, w, WALL_H * 0.62);
+      const pos = tileToWorld(level, w, 0);
       pos.x += DELTA[d].x * 0.505;
       pos.z += DELTA[d].y * 0.505;
-      strips.push({ pos, rotY: d === 'N' || d === 'S' ? 0 : Math.PI / 2, purple: hash(w.x * 3 + 1, w.y * 7 + 2) > 0.55 });
+      const h1 = hash(w.x * 3 + DELTA[d].x, w.y * 7 + DELTA[d].y);
+      faces.push({ pos, rotY: d === 'N' || d === 'S' ? 0 : Math.PI / 2, painted: h1 > 0.6, hue: hash(w.y + 11, w.x + 5) });
     }
   }
-  const stripGeo = new THREE.BoxGeometry(0.72, 0.035, 0.02);
-  const stripMats = [glow(COLORS.cyan, 1.3), glow(COLORS.purple, 1.7)];
-  [false, true].forEach((purple, m) => {
-    const list = strips.filter((s) => s.purple === purple);
-    const mesh = new THREE.InstancedMesh(stripGeo, stripMats[m], list.length);
-    list.forEach((s, i) => {
-      dummy.position.copy(s.pos);
-      dummy.rotation.set(0, s.rotY, 0);
+  const place = (mesh: THREE.InstancedMesh, list: typeof faces, y: number) => {
+    list.forEach((f, i) => {
+      dummy.position.set(f.pos.x, y, f.pos.z);
+      dummy.rotation.set(0, f.rotY, 0);
       dummy.updateMatrix();
       mesh.setMatrixAt(i, dummy.matrix);
     });
-    group.add(mesh);
-  });
+    return mesh;
+  };
+  const skirting = new THREE.InstancedMesh(new THREE.BoxGeometry(0.98, 0.025, 0.02), glow(COLORS.brass, 1.1), faces.length);
+  group.add(place(skirting, faces, 0.07));
+
+  const painted = faces.filter((f) => f.painted);
+  const frames = new THREE.InstancedMesh(
+    new THREE.BoxGeometry(0.62, 0.34, 0.03),
+    new THREE.MeshStandardMaterial({ color: 0x8a6a2a, metalness: 0.9, roughness: 0.35 }),
+    painted.length,
+  );
+  const canvases = new THREE.InstancedMesh(new THREE.BoxGeometry(0.52, 0.24, 0.045), new THREE.MeshBasicMaterial({ color: 0xffffff }), painted.length);
+  const paint = new THREE.Color();
+  painted.forEach((f, i) => canvases.setColorAt(i, paint.setHSL(f.hue, 0.55, 0.32)));
+  group.add(place(frames, painted, 0.33), place(canvases, painted, 0.33));
 
   // Patrol routes, drawn as dashed loops on the floor.
   for (const def of level.guards) {
@@ -237,6 +247,21 @@ export function buildEnvironment(level: Level): Environment {
     light.position.y = lift + 0.6;
     holder.add(model, light);
     base.add(holder);
+
+    // Gallery spotlight: a faint additive cone from the ceiling down onto the exhibit.
+    const beam = new THREE.Mesh(
+      new THREE.ConeGeometry(0.42, 2.4, 16, 1, true),
+      new THREE.MeshBasicMaterial({
+        color: colour,
+        transparent: true,
+        opacity: 0.07,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      }),
+    );
+    beam.position.y = 1.25;
+    base.add(beam);
     group.add(base);
     holders.set(a.id, holder);
     spinners.push(model);
@@ -254,15 +279,8 @@ export function buildEnvironment(level: Level): Environment {
   // Decorative props sitting on top of walls. They never affect the simulation.
   const blinkMat = glow(COLORS.red, 2.5);
   const propDark = new THREE.MeshStandardMaterial({ color: 0x2a3552, metalness: 0.7, roughness: 0.4 });
-  const tankMat = new THREE.MeshStandardMaterial({
-    color: 0x1a1238,
-    emissive: COLORS.purple,
-    emissiveIntensity: 0.8,
-    transparent: true,
-    opacity: 0.85,
-    roughness: 0.2,
-  });
-  const consoleScreen = glow(COLORS.purple, 1.8);
+  const marble = new THREE.MeshStandardMaterial({ color: 0xe9e4f2, roughness: 0.35, metalness: 0.05 });
+  const plaqueMat = glow(COLORS.brass, 1.2);
   const cameras: THREE.Group[] = [];
   for (const d of level.decor) {
     const prop = new THREE.Group();
@@ -280,21 +298,22 @@ export function buildEnvironment(level: Level): Environment {
       prop.add(mast, head);
       cameras.push(head);
     } else if (d.type === 'console') {
-      const desk = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.2, 0.4), propDark);
-      desk.position.y = 0.1;
-      const screen = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.26, 0.02), consoleScreen);
-      screen.position.set(0, 0.34, -0.1);
-      screen.rotation.x = -0.25;
-      prop.add(desk, screen);
+      // Information plinth with a softly lit plaque.
+      const desk = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.16, 0.34), propDark);
+      desk.position.y = 0.08;
+      const plaque = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.22, 0.02), plaqueMat);
+      plaque.position.set(0, 0.28, -0.08);
+      plaque.rotation.x = -0.3;
+      prop.add(desk, plaque);
     } else {
-      const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.5, 8), tankMat);
-      tank.position.y = 0.3;
-      const capGeo = new THREE.CylinderGeometry(0.23, 0.23, 0.05, 8);
-      const bottom = new THREE.Mesh(capGeo, propDark);
-      bottom.position.y = 0.03;
-      const top = new THREE.Mesh(capGeo, propDark);
-      top.position.y = 0.57;
-      prop.add(tank, bottom, top);
+      // Marble bust on a pedestal.
+      const pedestal = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.28, 0.3), marble);
+      pedestal.position.y = 0.14;
+      const shoulders = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.17, 0.16, 6), marble);
+      shoulders.position.y = 0.36;
+      const head = new THREE.Mesh(new THREE.IcosahedronGeometry(0.11, 0), marble);
+      head.position.y = 0.53;
+      prop.add(pedestal, shoulders, head);
     }
     group.add(prop);
   }
@@ -306,7 +325,7 @@ export function buildEnvironment(level: Level): Environment {
   const key = new THREE.DirectionalLight(0xcfe0ff, 2.2);
   key.position.set(-4, 10, 6);
   group.add(key);
-  const fillA = new THREE.PointLight(COLORS.purple, 14, 11, 1.5);
+  const fillA = new THREE.PointLight(COLORS.brass, 6, 11, 1.5);
   fillA.position.set(-3.5, 2.2, 2.5);
   const fillB = new THREE.PointLight(COLORS.cyan, 12, 11, 1.5);
   fillB.position.set(3.5, 2.2, -1.5);
@@ -315,7 +334,7 @@ export function buildEnvironment(level: Level): Environment {
   return {
     group,
     update(time) {
-      fillA.intensity = 14 + Math.sin(time * 0.8) * 3;
+      fillA.intensity = 6 + Math.sin(time * 0.8) * 1.5;
       fillB.intensity = 12 + Math.sin(time * 0.6 + 2) * 3;
       doorMat.emissiveIntensity = 2.2 + Math.sin(time * 3) * 0.5;
       blinkMat.emissiveIntensity = Math.sin(time * 4) > 0.2 ? 2.8 : 0.2;
@@ -331,7 +350,7 @@ export function buildEnvironment(level: Level): Environment {
     },
     setAlarm(alarm) {
       const k = Math.min(1, alarm / 3);
-      fillA.color.setHex(COLORS.purple).lerp(alarmRed, k);
+      fillA.color.setHex(COLORS.brass).lerp(alarmRed, k);
       fillB.color.setHex(COLORS.cyan).lerp(alarmRed, k * 0.8);
       ambient.color.setHex(0x8fa4e0).lerp(alarmRed, k * 0.35);
     },

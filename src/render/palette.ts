@@ -3,10 +3,12 @@ import type { CurseId, GuardState } from '../sim/types';
 /** One palette shared by the 3D scene, the 2D comparison maps and the CSS. */
 export const COLORS = {
   bg: 0x05070d,
-  floor: 0x141b2b,
-  floorAlt: 0x182134,
-  wall: 0x2c3b63,
-  wallTop: 0x40558a,
+  // Museum: dark polished marble underfoot, pale stone walls, brass trim.
+  floor: 0x17141f,
+  floorAlt: 0x211c2b,
+  wall: 0x4a4560,
+  wallTop: 0x6b6585,
+  brass: 0xffc65c,
   cyan: 0x36e0ff,
   purple: 0x9b6bff,
   magenta: 0xff4fd8,

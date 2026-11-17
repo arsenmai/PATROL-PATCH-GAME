@@ -117,6 +117,6 @@ export const LAB_LEVEL: Level = parseLevel(
  * Results of the exhaustive solver for LAB_LEVEL, asserted by the test suite so they can never drift.
  * Shown to the player on the result screen.
  */
-export const LAB_PROVEN = { withoutPatch: 300, withBestPatch: 600 } as const;
+export const LAB_PROVEN = { withoutPatch: 300, withBestPatch: 600, bestTurns: 55 } as const;
 
 export const totalLoot = (level: Level): number => level.artifacts.reduce((sum, a) => sum + a.value, 0);

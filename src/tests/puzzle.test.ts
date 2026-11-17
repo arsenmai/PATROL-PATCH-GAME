@@ -38,6 +38,7 @@ describe('level validation (exhaustive solver)', () => {
   it('all three artifacts are possible, but only just', () => {
     const best = patched.find((p) => same(p.patch, WINNING))!.solution;
     expect(best.loot).toBe(LAB_PROVEN.withBestPatch);
+    expect(best.actions.length).toBe(LAB_PROVEN.bestTurns);
     expect(best.loot).toBe(totalLoot(LAB_LEVEL));
     // The perfect heist leaves fewer than ten turns on the clock.
     const final = runReplay(LAB_LEVEL, best.actions, WINNING).final;

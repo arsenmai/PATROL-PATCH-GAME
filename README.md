@@ -21,7 +21,7 @@ Rule Heist grew out of an earlier prototype, Patrol Patch (git tag `v1-patrol-pa
 ```bash
 npm install
 npm run dev        # development server, http://localhost:5173
-npm test           # 45 simulation tests (the solver proofs take ~6 s)
+npm test           # 52 simulation tests (the solver proofs take ~12 s)
 npm run build      # type-check + production build into dist/
 npm run preview    # serve the production build
 ```
@@ -68,6 +68,23 @@ What the solver proves about this level:
 * exactly **one** of the six possible patches opens the gallery;
 * with that patch **all three artifacts (600)** are possible, with only seven turns left on the clock;
 * a different patch has a different use: it makes the safe two-artifact run eight turns faster.
+
+## Heist of the day
+
+Besides the classic museum there is a daily heist: the same building re-dressed from a seed. A seed decides
+which artifact is locked in the sealed gallery, where the other two stand, and which way the hall guard walks.
+When the Crown is the one behind glass, the gallery is barely worth the risk and a different hack becomes the
+smart choice — so the "right" patch is not the same every day.
+
+Nothing is random at play time. `scripts/gen-daily.ts` runs the exhaustive solver over candidate seeds, keeps
+only heists that are fair (something is stealable on factory AI, the right hack is worth it, all three artifacts
+are possible), sets the turn limit so that the perfect run has seven turns to spare, and writes the rotation
+with its proven par to `src/sim/daily-data.ts`. The result screen shows that par, your personal best (stored in
+the browser) and a one-line result to copy and share.
+
+```bash
+npx vite-node scripts/gen-daily.ts 14    # regenerate a two-week rotation (about two minutes)
+```
 
 ## The AI system
 
@@ -154,6 +171,7 @@ src/
 │   ├── curses.ts       data-driven curse table and shared security modifiers
 │   ├── simulation.ts   createInitialState, step
 │   ├── replay.ts       recorder + counterfactual comparison
+│   ├── daily.ts        seeded variants and the heist-of-the-day rotation
 │   └── solver.ts       exhaustive search for the best possible heist
 ├── render/         Three.js presentation (reads GameState only)
 │   ├── scene.ts        camera, bloom, tweens, cones, labels
@@ -187,7 +205,8 @@ src/
 
 ## Technical highlights
 
-* Deterministic, pure turn-based simulation core with 45 tests that run without a browser.
+* Deterministic, pure turn-based simulation core with 52 tests that run without a browser.
+* Seeded daily levels, each validated offline by the solver and shipped with a proven par score.
 * Data-driven finite state machines whose transition rules can be swapped at runtime.
 * Exhaustive state-space solver with dominance pruning, used as an automated level-design proof
   (optimal haul with and without a patch).
@@ -210,7 +229,6 @@ it. The next step would be a `players` array with ids; networking would come aft
 
 ## Possible next steps
 
-* Seeded "heist of the day": artifact and curse placement from a seed, with the solver computing the par score.
 * A hint button powered by the solver.
 * More museums, validated automatically by the same solver tests.
 * Replace primitive models with authored or generated GLB assets (the simulation would not change).
