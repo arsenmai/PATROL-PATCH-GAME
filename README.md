@@ -204,8 +204,8 @@ src/
 * **Two generated assets, both optional.** The menu key art (`public/title.jpg`) and the guard model
   (`public/models/guard.glb`) were generated with Higgsfield (GPT Image and Tripo text-to-3D). The game probes for
   them at start-up and falls back to the procedural menu and the primitive robot if they are missing.
-* **Everything else is procedural** (primitives, instancing, emissive materials, one bloom pass). There are no
-  texture or model files; the production bundle is about 140 kB gzipped.
+* **Everything else is procedural** (primitives, instancing, emissive materials, one bloom pass). The JavaScript
+  bundle is about 170 kB gzipped; the two optional assets add roughly 2.6 MB.
 
 ## Technical highlights
 
