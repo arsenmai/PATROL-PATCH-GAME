@@ -1,4 +1,4 @@
-import { guardMods } from '../sim/curses';
+import { sightMultiplier } from '../sim/curses';
 import { visibleTiles } from '../sim/detection';
 import { DELTA } from '../sim/grid';
 import type { Comparison, Replay } from '../sim/replay';
@@ -47,10 +47,10 @@ function drawMap(canvas: HTMLCanvasElement, level: Level, state: GameState): voi
 
   for (const a of level.artifacts) {
     const stolen = state.taken.includes(a.id);
-    if (stolen && !a.terminal) continue;
+    if (stolen) continue;
     const [ax, ay] = centre(a.pos);
-    const r = a.terminal ? 10 : 6;
-    ctx.fillStyle = css(stolen ? COLORS.green : a.terminal ? COLORS.cyan : CURSE_COLOR[a.curse ?? 'NONE']);
+    const r = a.sealed ? 9 : 6;
+    ctx.fillStyle = css(CURSE_COLOR[a.curse ?? 'NONE']);
     ctx.beginPath();
     ctx.moveTo(ax, ay - r);
     ctx.lineTo(ax + r, ay);
@@ -60,12 +60,12 @@ function drawMap(canvas: HTMLCanvasElement, level: Level, state: GameState): voi
     ctx.fill();
   }
 
-  const { rangeBonus } = guardMods(state);
+  const rangeMultiplier = sightMultiplier(state);
   state.guards.forEach((g, i) => {
     const colour = css(g.seesPlayer ? COLORS.red : STATE_COLOR[g.state]);
     ctx.globalAlpha = g.seesPlayer ? 0.4 : 0.2;
     ctx.fillStyle = colour;
-    for (const t of visibleTiles(level, g.pos, g.facing, level.guards[i].range + rangeBonus)) {
+    for (const t of visibleTiles(level, g.pos, g.facing, level.guards[i].range * rangeMultiplier)) {
       ctx.fillRect(t.x * TILE + 2, t.y * TILE + 2, TILE - 4, TILE - 4);
     }
     ctx.globalAlpha = 1;
@@ -98,7 +98,7 @@ function drawMap(canvas: HTMLCanvasElement, level: Level, state: GameState): voi
   });
 
   const [px, py] = centre(state.player);
-  const lost = state.status === 'CAUGHT' || state.status === 'TRAPPED';
+  const lost = state.status === 'CAUGHT' || state.status === 'TIMEOUT';
   ctx.fillStyle = css(lost ? COLORS.red : COLORS.green);
   ctx.beginPath();
   ctx.arc(px, py, 6.5, 0, Math.PI * 2);
@@ -118,7 +118,7 @@ function drawMap(canvas: HTMLCanvasElement, level: Level, state: GameState): voi
 const OUTCOME: Record<GameState['status'], string> = {
   PLAYING: 'IN PROGRESS',
   CAUGHT: 'CAPTURED — LOOT LOST',
-  TRAPPED: 'LOCKED IN — LOOT LOST',
+  TIMEOUT: 'OUT OF TIME — LOOT LOST',
   ESCAPED: 'ESCAPED',
 };
 
@@ -255,7 +255,7 @@ export class CompareView {
         'table',
         {},
         h('tr', {}, h('th', {}, 'PLAYER'), h('td', {}, `(${state.player.x}, ${state.player.y})`)),
-        h('tr', {}, h('th', {}, 'LOOT'), h('td', {}, `£${state.loot}${state.curses.length ? '  ·  ' + state.curses.join(', ') : ''}`)),
+        h('tr', {}, h('th', {}, 'LOOT'), h('td', {}, `${state.loot}  (${state.taken.length}/${this.level.artifacts.length})${state.curses.length ? '  ·  ' + state.curses.join(', ') : ''}`)),
         ...state.guards.map((g) =>
           h(
             'tr',

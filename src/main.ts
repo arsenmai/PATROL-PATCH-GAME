@@ -101,6 +101,7 @@ class Game {
         this.ui.setPhase('HACK');
         this.ui.clearLog();
         this.ui.log('Uplink established. Guard firmware is writable.');
+        this.ui.update(this.state);
         this.editor.setLiveState(null);
         this.editor.setLocked(false);
         this.scene.setSelectedGuard(this.editor.selectedGuard);
@@ -123,7 +124,7 @@ class Game {
       }
 
       case 'RESULT':
-        this.ui.showResult(this.state, this.patches.current !== null);
+        this.ui.showResult(this.state);
         break;
 
       case 'COMPARE': {
@@ -176,6 +177,11 @@ class Game {
       sfx.loot();
       if (happened('CURSE')) sfx.curse();
     } else sfx.step();
+
+    if (happened('LOOT')) {
+      const stolen = this.level.artifacts.find((a) => a.id === this.state.taken[this.state.taken.length - 1]);
+      if (stolen) this.ui.toastArtifact(stolen);
+    }
 
     if (this.state.status !== 'PLAYING') {
       this.resultTimer = window.setTimeout(() => this.setPhase('RESULT'), 900);

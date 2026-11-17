@@ -3,7 +3,7 @@ import { CURSES, guardMods, turnsLeft } from '../sim/curses';
 import { LAB_LEVEL, MISSION_TURNS, parseLevel } from '../sim/level';
 import { DEFAULT_RULES } from '../sim/patch';
 import { createInitialState, step } from '../sim/simulation';
-import type { Action, Level } from '../sim/types';
+import type { Action, CurseId, GameState, Level } from '../sim/types';
 import { run, teleport } from './helpers';
 
 const at = (id: string) => LAB_LEVEL.artifacts.find((a) => a.id === id)!.pos;
@@ -56,8 +56,8 @@ describe('curses', () => {
   });
 
   it('PURSUIT: guards take one extra step on every 5th turn (+20%)', () => {
-    const tilesMoved = (curses: 'PURSUIT'[]) => {
-      let s = { ...createInitialState(LAB_LEVEL), curses };
+    const tilesMoved = (curses: CurseId[]) => {
+      let s: GameState = { ...createInitialState(LAB_LEVEL), curses };
       let total = 0;
       for (let i = 0; i < 10; i++) {
         const before = s.guards[0].pos;

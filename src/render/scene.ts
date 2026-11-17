@@ -3,7 +3,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
-import { CURSES, guardMods } from '../sim/curses';
+import { CURSES, sightMultiplier } from '../sim/curses';
 import { visibleTiles } from '../sim/detection';
 import type { GameState, Level } from '../sim/types';
 import { FACING_ANGLE, createGuardModel, createPlayerModel, type GuardModel, type PlayerModel } from './characters';
@@ -102,15 +102,13 @@ export class LabScene {
       const el = document.createElement('div');
       el.className = 'loot-label';
       el.style.setProperty('--c', css(CURSE_COLOR[a.curse ?? 'NONE']));
-      el.innerHTML = `<b>£${a.value}</b>${a.curse ? `<span>⚠ ${CURSES[a.curse].name}</span>` : '<span>safe</span>'}`;
-      el.title = `${a.name}${a.curse ? ' — ' + CURSES[a.curse].summary : ''}`;
+      el.innerHTML = `<b>${a.name} · ${a.value}</b>${a.curse ? `<span>⚠ ${CURSES[a.curse].short}</span>` : '<span>no curse</span>'}`;
       this.labelLayer.appendChild(el);
-      // The terminal's tag hangs below it so it never collides with loot on the tile behind.
-      this.pins.push({ el, at: tileToWorld(level, a.pos, a.terminal ? 0 : 1.0), id: a.id, below: !!a.terminal });
+      this.pins.push({ el, at: tileToWorld(level, a.pos, a.sealed ? 1.45 : 1.0), id: a.id, below: false });
     }
     const exitEl = document.createElement('div');
     exitEl.className = 'loot-label exit';
-    exitEl.innerHTML = '<b>EXIT</b>';
+    exitEl.innerHTML = '<b>EXTRACTION</b>';
     this.labelLayer.appendChild(exitEl);
     this.pins.push({ el: exitEl, at: tileToWorld(level, level.start, 0), id: null, below: true });
 
@@ -164,11 +162,12 @@ export class LabScene {
     this.animating = !instant;
     if (instant) this.applyTweens(1);
 
-    const detected = state.guards.some((g) => g.seesPlayer) || state.status === 'CAUGHT' || state.status === 'TRAPPED';
+    const detected = state.guards.some((g) => g.seesPlayer) || state.status === 'CAUGHT' || state.status === 'TIMEOUT';
     this.player.accent.emissive.setHex(detected ? COLORS.red : COLORS.green);
     this.env.setTaken(state.taken);
+    this.env.setAlarm(state.curses.length);
     for (const pin of this.pins) pin.el.classList.toggle('gone', pin.id !== null && state.taken.includes(pin.id));
-    const { rangeBonus } = guardMods(state);
+    const rangeMultiplier = sightMultiplier(state);
 
     state.guards.forEach((g, i) => {
       const def = this.level.guards[i];
@@ -179,7 +178,7 @@ export class LabScene {
       const cone = this.cones[i];
       cone.material.color.setHex(g.seesPlayer ? COLORS.red : color);
       cone.material.opacity = g.seesPlayer ? 0.42 : 0.2;
-      const tiles = visibleTiles(this.level, g.pos, g.facing, def.range + rangeBonus);
+      const tiles = visibleTiles(this.level, g.pos, g.facing, def.range * rangeMultiplier);
       cone.tiles.forEach((mesh, t) => {
         mesh.visible = t < tiles.length;
         if (mesh.visible) mesh.position.copy(tileToWorld(this.level, tiles[t], 0.02 + i * 0.004));

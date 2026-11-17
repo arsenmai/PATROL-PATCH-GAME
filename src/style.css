@@ -245,7 +245,7 @@ kbd {
   inset: 0;
   pointer-events: none;
   opacity: 0;
-  box-shadow: inset 0 0 140px 30px rgba(255, 68, 102, 0.55);
+  box-shadow: inset 0 0 120px 10px rgba(255, 68, 102, 0.38);
   transition: opacity 0.2s;
 }
 
@@ -255,7 +255,8 @@ kbd {
 
 .alert-banner {
   position: absolute;
-  top: 18px;
+  top: auto;
+  bottom: 54px;
   left: 50%;
   transform: translate(-50%, -8px);
   padding: 6px 18px;
@@ -704,8 +705,8 @@ kbd {
   color: var(--amber);
 }
 
-.log li.trapped,
-.cmp-events li.trapped {
+.log li.timeout,
+.cmp-events li.timeout {
   color: var(--red);
   font-weight: 700;
 }
@@ -958,7 +959,7 @@ kbd {
   border-color: var(--red);
 }
 
-.cmp-outcome.trapped {
+.cmp-outcome.timeout {
   color: var(--red);
   border-color: var(--red);
 }
@@ -1035,4 +1036,171 @@ kbd {
     animation: none !important;
     transition: none !important;
   }
+}
+
+/* ---------- Rule Heist additions ---------- */
+
+.alarm {
+  display: flex;
+  gap: 4px;
+  padding: 6px 0 4px;
+}
+
+.alarm i {
+  width: 14px;
+  height: 8px;
+  background: var(--line);
+  border-radius: 2px;
+  transition: background 0.3s, box-shadow 0.3s;
+}
+
+.alarm i.on {
+  background: var(--red);
+  box-shadow: 0 0 10px var(--red);
+}
+
+.toast {
+  --c: var(--amber);
+  position: absolute;
+  left: 50%;
+  top: 22%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 300px;
+  padding: 14px 26px;
+  text-align: center;
+  background: rgba(5, 7, 13, 0.88);
+  border: 1px solid var(--c);
+  border-radius: 6px;
+  box-shadow: 0 0 40px color-mix(in srgb, var(--c) 45%, transparent);
+  opacity: 0;
+  transform: translate(-50%, -12px) scale(0.96);
+  pointer-events: none;
+  transition: opacity 0.25s, transform 0.25s;
+}
+
+.toast.show {
+  opacity: 1;
+  transform: translate(-50%, 0) scale(1);
+}
+
+.toast small {
+  font-size: 10.5px;
+  letter-spacing: 0.3em;
+  color: var(--dim);
+}
+
+.toast b {
+  font-size: 20px;
+  letter-spacing: 0.1em;
+  color: var(--c);
+}
+
+.toast .plus {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--green);
+}
+
+.toast .curse {
+  margin-top: 4px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--red);
+}
+
+.howto {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 30px;
+  padding: 0;
+  list-style: none;
+  text-align: left;
+  color: var(--dim);
+}
+
+.howto b {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin-right: 10px;
+  font-size: 11px;
+  color: var(--cyan);
+  border: 1px solid var(--cyan);
+  border-radius: 50%;
+}
+
+.loot-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 14px 0;
+}
+
+.loot-row {
+  --c: var(--cyan);
+  display: grid;
+  grid-template-columns: 170px 50px 1fr;
+  align-items: baseline;
+  gap: 10px;
+  padding: 7px 10px;
+  font-size: 11.5px;
+  color: var(--dim);
+  background: var(--panel-2);
+  border-left: 3px solid var(--c);
+  border-radius: 3px;
+}
+
+.loot-row b {
+  color: var(--c);
+  letter-spacing: 0.06em;
+}
+
+.loot-row .val {
+  font-weight: 700;
+  color: var(--green);
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin: 6px 0 16px;
+}
+
+.stats div {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+
+.stats span {
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  color: var(--dim);
+}
+
+.stats strong {
+  font-size: 24px;
+  line-height: 1.3;
+}
+
+.stats .good {
+  color: var(--green);
+}
+
+.stats .bad {
+  color: var(--red);
+  text-decoration: line-through;
+}
+
+.loot-label b {
+  letter-spacing: 0.04em;
 }

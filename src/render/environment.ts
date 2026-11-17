@@ -10,8 +10,10 @@ export interface Environment {
   group: THREE.Group;
   /** Called every frame with elapsed seconds; drives the few ambient animations. */
   update(time: number): void;
-  /** Hides stolen prototypes and marks the terminal as breached. */
+  /** Hides stolen artifacts. */
   setTaken(taken: readonly string[]): void;
+  /** 0 = calm. Each active curse raises the alarm and pushes the hall lighting towards red. */
+  setAlarm(level: number): void;
 }
 
 /** Converts a tile coordinate to the world-space centre of that tile. */
@@ -26,6 +28,47 @@ const hash = (x: number, y: number): number => {
   const s = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
   return s - Math.floor(s);
 };
+
+/** Low-poly stand-ins for the three artifacts; anything else gets a generic gem. */
+function buildArtifactModel(id: string, mat: THREE.Material): THREE.Group {
+  const g = new THREE.Group();
+  if (id === 'crown') {
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.08, 10, 1, true), mat);
+    (band.material as THREE.Material).side = THREE.DoubleSide;
+    g.add(band);
+    for (let i = 0; i < 5; i++) {
+      const spike = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.13, 4), mat);
+      const angle = (i / 5) * Math.PI * 2;
+      spike.position.set(Math.cos(angle) * 0.15, 0.1, Math.sin(angle) * 0.15);
+      g.add(spike);
+    }
+  } else if (id === 'mask') {
+    const face = new THREE.Mesh(new THREE.SphereGeometry(0.17, 7, 5, 0, Math.PI), mat);
+    face.scale.set(0.85, 1.15, 0.6);
+    const eyeMat = new THREE.MeshBasicMaterial({ color: 0x05070d });
+    for (const side of [-1, 1]) {
+      const eye = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.03, 0.03), eyeMat);
+      eye.position.set(side * 0.06, 0.04, 0.095);
+      g.add(eye);
+    }
+    g.add(face);
+  } else if (id === 'hourglass') {
+    const top = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.16, 8), mat);
+    top.rotation.x = Math.PI;
+    top.position.y = 0.08;
+    const bottom = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.16, 8), mat);
+    bottom.position.y = -0.08;
+    const capGeo = new THREE.CylinderGeometry(0.13, 0.13, 0.025, 8);
+    const capTop = new THREE.Mesh(capGeo, mat);
+    capTop.position.y = 0.17;
+    const capBottom = new THREE.Mesh(capGeo, mat);
+    capBottom.position.y = -0.17;
+    g.add(top, bottom, capTop, capBottom);
+  } else {
+    g.add(new THREE.Mesh(new THREE.OctahedronGeometry(0.16, 0), mat));
+  }
+  return g;
+}
 
 export function buildEnvironment(level: Level): Environment {
   const group = new THREE.Group();
@@ -153,48 +196,50 @@ export function buildEnvironment(level: Level): Environment {
     group.add(sill);
   }
 
-  // Central computer.
-  const t = tileToWorld(level, level.terminal);
-  const screenMat = glow(COLORS.cyan, 2.4);
-  const terminal = new THREE.Group();
-  terminal.position.copy(t);
-  const body = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.3, 0.42, 0.7, 6),
-    new THREE.MeshStandardMaterial({ color: 0x232f4d, metalness: 0.8, roughness: 0.3 }),
-  );
-  body.position.y = 0.35;
-  const band = new THREE.Mesh(new THREE.CylinderGeometry(0.33, 0.33, 0.05, 6), screenMat);
-  band.position.y = 0.72;
-  const core = new THREE.Mesh(new THREE.OctahedronGeometry(0.2, 0), screenMat);
-  core.position.y = 1.15;
-  const halo = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.012, 6, 32), screenMat);
-  halo.position.y = 1.15;
-  const terminalLight = new THREE.PointLight(COLORS.cyan, 5, 5, 1.6);
-  terminalLight.position.y = 1.3;
-  terminal.add(body, band, core, halo, terminalLight);
-  group.add(terminal);
-
-  // Loose prototypes: a low plinth with a floating gem, tinted by the countermeasure it is wired to.
-  const gems = new Map<string, THREE.Group>();
+  // Artifacts. Loose ones float over a low plinth; the sealed one sits in a glass case on a pedestal.
+  const holders = new Map<string, THREE.Group>();
+  const spinners: THREE.Object3D[] = [];
   const plinthMat = new THREE.MeshStandardMaterial({ color: 0x2a3552, metalness: 0.8, roughness: 0.3 });
+  const glassMat = new THREE.MeshStandardMaterial({ color: 0x9fd8ff, transparent: true, opacity: 0.14, roughness: 0.05, metalness: 0.2 });
   for (const a of level.artifacts) {
-    if (a.terminal) continue;
     const colour = CURSE_COLOR[a.curse ?? 'NONE'];
+    const base = new THREE.Group();
+    base.position.copy(tileToWorld(level, a.pos));
+    const lift = a.sealed ? 0.55 : 0;
+
+    if (a.sealed) {
+      const pedestal = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.42, 0.55, 6), plinthMat);
+      pedestal.position.y = 0.275;
+      const band = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.04, 6), glow(colour, 2));
+      band.position.y = 0.55;
+      const glass = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.7, 0.5), glassMat);
+      glass.position.y = 0.92;
+      const edges = new THREE.LineSegments(
+        new THREE.EdgesGeometry(glass.geometry),
+        new THREE.LineBasicMaterial({ color: 0xbfe9ff, transparent: true, opacity: 0.6 }),
+      );
+      edges.position.copy(glass.position);
+      base.add(pedestal, band, glass, edges);
+    } else {
+      const plinth = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.3, 0.05, 8), plinthMat);
+      plinth.position.y = 0.03;
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(0.27, 0.014, 6, 24), glow(colour, 1.8));
+      rim.rotation.x = Math.PI / 2;
+      rim.position.y = 0.06;
+      base.add(plinth, rim);
+    }
+
+    // Everything in `holder` disappears when the artifact is stolen; the furniture stays.
     const holder = new THREE.Group();
-    holder.position.copy(tileToWorld(level, a.pos));
-    const plinth = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.3, 0.05, 8), plinthMat);
-    plinth.position.y = 0.03;
-    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.27, 0.014, 6, 24), glow(colour, 1.8));
-    rim.rotation.x = Math.PI / 2;
-    rim.position.y = 0.06;
-    const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.15 + a.value / 4000, 0), glow(colour, 2.2));
-    gem.name = 'gem';
-    gem.position.y = 0.5;
-    const light = new THREE.PointLight(colour, 2.2, 2.4, 1.6);
-    light.position.y = 0.6;
-    holder.add(plinth, rim, gem, light);
-    group.add(holder);
-    gems.set(a.id, holder);
+    const model = buildArtifactModel(a.id, glow(colour, 2.3));
+    model.position.y = lift + 0.42;
+    const light = new THREE.PointLight(colour, a.sealed ? 5 : 2.4, a.sealed ? 4.5 : 2.6, 1.6);
+    light.position.y = lift + 0.6;
+    holder.add(model, light);
+    base.add(holder);
+    group.add(base);
+    holders.set(a.id, holder);
+    spinners.push(model);
   }
 
   // Extraction pad on the start tile.
@@ -255,7 +300,9 @@ export function buildEnvironment(level: Level): Environment {
   }
 
   // Lighting: cool key light plus two slowly breathing neon fills.
-  group.add(new THREE.AmbientLight(0x8fa4e0, 1.1));
+  const ambient = new THREE.AmbientLight(0x8fa4e0, 1.1);
+  const alarmRed = new THREE.Color(COLORS.red);
+  group.add(ambient);
   const key = new THREE.DirectionalLight(0xcfe0ff, 2.2);
   key.position.set(-4, 10, 6);
   group.add(key);
@@ -268,33 +315,25 @@ export function buildEnvironment(level: Level): Environment {
   return {
     group,
     update(time) {
-      core.rotation.y = time * 1.2;
-      core.position.y = 1.15 + Math.sin(time * 2) * 0.04;
-      halo.rotation.x = Math.PI / 2 + Math.sin(time * 0.9) * 0.5;
-      halo.rotation.y = time * 0.7;
       fillA.intensity = 14 + Math.sin(time * 0.8) * 3;
       fillB.intensity = 12 + Math.sin(time * 0.6 + 2) * 3;
       doorMat.emissiveIntensity = 2.2 + Math.sin(time * 3) * 0.5;
       blinkMat.emissiveIntensity = Math.sin(time * 4) > 0.2 ? 2.8 : 0.2;
       cameras.forEach((c, i) => (c.rotation.y = Math.sin(time * 0.5 + i * 1.7) * 0.9));
-      let n = 0;
-      for (const holder of gems.values()) {
-        const gem = holder.getObjectByName('gem');
-        if (gem) {
-          gem.rotation.y = time * 1.4 + n;
-          gem.position.y = 0.5 + Math.sin(time * 2.2 + n) * 0.05;
-        }
-        n++;
-      }
+      spinners.forEach((model, n) => {
+        model.rotation.y = time * 1.2 + n * 2;
+        model.position.y += Math.sin(time * 2.2 + n * 2) * 0.0008;
+      });
       exitMat.opacity = 0.45 + Math.sin(time * 3) * 0.2;
     },
     setTaken(taken) {
-      for (const [id, holder] of gems) holder.visible = !taken.includes(id);
-      const breached = level.artifacts.some((a) => a.terminal && taken.includes(a.id));
-      const c = breached ? COLORS.green : COLORS.cyan;
-      screenMat.emissive.setHex(c);
-      terminalLight.color.setHex(c);
-      terminalLight.intensity = breached ? 12 : 5;
+      for (const [id, holder] of holders) holder.visible = !taken.includes(id);
+    },
+    setAlarm(alarm) {
+      const k = Math.min(1, alarm / 3);
+      fillA.color.setHex(COLORS.purple).lerp(alarmRed, k);
+      fillB.color.setHex(COLORS.cyan).lerp(alarmRed, k * 0.8);
+      ambient.color.setHex(0x8fa4e0).lerp(alarmRed, k * 0.35);
     },
   };
 }

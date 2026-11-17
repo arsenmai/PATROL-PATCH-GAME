@@ -95,9 +95,7 @@ export class AIEditor {
   }
 
   private render(): void {
-    // During a mission the guards themselves are the truth: ROLLBACK can erase the patch mid-run.
-    const rolledBack = this.live !== null && this.patches.current !== null && !this.live.guards.some((g) => g.hacked);
-    const active = rolledBack ? null : this.patches.current;
+    const active = this.patches.current;
     const guardDef = this.level.guards.find((g) => g.id === this.selected)!;
 
     const tabs = h(
@@ -185,7 +183,7 @@ export class AIEditor {
         'header',
         { class: 'panel-title' },
         h('span', {}, 'GUARD AI EDITOR'),
-        rolledBack ? h('span', { class: 'badge warn' }, 'PATCH ERASED') : this.locked ? h('span', { class: 'badge' }, 'READ-ONLY') : null,
+        this.locked ? h('span', { class: active ? 'badge ok' : 'badge' }, active ? 'HACK ACTIVE' : 'NO HACK') : null,
       ),
       budget,
       tabs,

@@ -11,6 +11,8 @@ import type { CurseId, GameState } from './types';
 export interface CurseSpec {
   id: CurseId;
   name: string;
+  /** A few words for the price tag floating over the artifact. */
+  short: string;
   /** Shown in the "artifact stolen" toast. */
   headline: string;
   summary: string;
@@ -26,6 +28,7 @@ export const CURSES: Record<CurseId, CurseSpec> = {
   SIGHT: {
     id: 'SIGHT',
     name: 'CURSE OF SIGHT',
+    short: '+25% guard sight',
     headline: 'GUARD DETECTION RANGE INCREASED',
     summary: 'Guards see 25% further.',
     rangeMultiplier: 1.25,
@@ -33,6 +36,7 @@ export const CURSES: Record<CurseId, CurseSpec> = {
   PURSUIT: {
     id: 'PURSUIT',
     name: 'CURSE OF PURSUIT',
+    short: '+20% guard speed',
     headline: 'GUARD SPEED INCREASED',
     summary: 'Guards are 20% faster: an extra step every 5th turn.',
     surgeEvery: 5,
@@ -40,6 +44,7 @@ export const CURSES: Record<CurseId, CurseSpec> = {
   HOURGLASS: {
     id: 'HOURGLASS',
     name: 'CURSE OF THE HOURGLASS',
+    short: '−10 turns',
     headline: 'MISSION TIME REDUCED',
     summary: 'The museum locks down 10 turns sooner.',
     turnPenalty: 10,

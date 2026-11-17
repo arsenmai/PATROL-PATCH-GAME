@@ -1,26 +1,27 @@
-# PATROL PATCH
+# RULE HEIST
 
-**A 3D stealth heist where you don't outrun the guards — you rewrite their AI.**
+**A stealth heist where you rewrite one rule of a guard's AI — and every artifact you steal rewrites the museum's.**
 
-You are a hacker breaking into a research vault guarded by two security robots. Before going in, you may change
-**one decision rule on one guard**. Inside, £2,200 of prototypes are waiting, and most of them are wired to a
-countermeasure: steal one and the guards get faster, see further, lose your patch, or seal the exit. Loot only
-counts if you walk it out, so every run ends with the same question: leave now, or push your luck?
+You break into a museum of cursed artifacts guarded by two security robots. Before going in you may change
+**one decision rule on one guard**. Inside, each artifact you steal curses the building: guards see further,
+move faster, or the clock jumps forward. Loot only counts if you carry it to the extraction point, so every run
+comes down to one question: leave now, or stay for more?
 
 Afterwards you can replay your exact moves against the *original* AI and see where the two timelines split.
 
-![Mid-heist with three countermeasures active](docs/screenshot-heist.png)
+![An artifact stolen mid-heist](docs/screenshot-heist.png)
 ![Guard AI Editor](docs/screenshot-editor.png)
 ![Counterfactual replay](docs/screenshot-compare.png)
 
 Built with TypeScript, Three.js, Vite and Vitest. No backend, no runtime AI API, no game engine.
+Rule Heist grew out of an earlier prototype, Patrol Patch (git tag `v1-patrol-patch`).
 
 ## Run it
 
 ```bash
 npm install
 npm run dev        # development server, http://localhost:5173
-npm test           # 40 simulation tests (the solver proofs take ~15 s)
+npm test           # 45 simulation tests (the solver proofs take ~6 s)
 npm run build      # type-check + production build into dist/
 npm run preview    # serve the production build
 ```
@@ -33,38 +34,40 @@ Node 20+ is recommended. `node scripts/single-file.mjs` (after a build) writes t
 | --- | --- |
 | `W` `A` `S` `D` / arrows | Move one tile |
 | `Space` | Wait one turn |
-| `E` | Steal the prototype you stand on / hack the terminal next to you / leave through the exit |
+| `E` | Steal the artifact you stand on / open the sealed case next to you / extract |
 | `R` | Restart and re-open the editor |
 | Mouse wheel | Zoom |
 
 1. **Hack** — pick a guard in the *Guard AI Editor*, stage one rule change, press *Apply patch*.
-2. **Steal** — guards only act when you do. Coloured floor tiles show what each guard can see; every prototype
-   carries a tag with its price and the countermeasure it triggers.
-3. **Leave or push on** — walk back to the EXIT whenever you like. Caught or locked in, you lose everything.
+2. **Steal** — the museum is turn-based: guards only act when you do. Coloured floor tiles show what each guard
+   can see; every artifact carries a tag with its value and its curse.
+3. **Leave or push on** — with at least one artifact you may extract at any time. Get caught, or run out of
+   turns, and the loot is lost.
 4. **Compare** — press *Compare AI behaviour* to scrub through both timelines side by side.
 
-## Loot and countermeasures
+## Artifacts and curses
 
-| Prototype | Value | Countermeasure when stolen |
+| Artifact | Value | Curse |
 | --- | --- | --- |
-| Data shard | £100 | none |
-| Cryo sample | £150 | none |
-| Neural chip | £250 | **Sensor boost** — every guard sees 2 tiles further |
-| Servo core | £300 | **Overclock** — every guard moves +1 tile per turn |
-| Master key (in the vault) | £400 | **Rollback** — guard firmware is restored, your patch is erased |
-| Core data (vault terminal) | £1,000 | **Lockdown** — the exit seals 22 turns later |
+| Crown of Sight | 100 | Guards see 25% further |
+| Mask of Pursuit | 200 | Guards are 20% faster — one extra step every 5th turn |
+| Cursed Hourglass (sealed gallery) | 300 | The museum locks down 10 turns sooner |
 
-A countermeasure is not a scripted event. It is a small piece of state (`curses`, `lockdownAt`) that the same
-guard FSM and the same `step` function read every turn (`sim/curses.ts`). In other words, your patch and the
-facility's countermeasures are the same kind of thing: rule changes applied to a running AI — one by you, the
-others against you.
+A heist lasts 72 turns. The game is turn-based, so the mission timer is a turn budget rather than a wall clock,
+and "20% faster" is an exact, deterministic extra step instead of a real-time speed change.
+
+**Two rule systems, kept apart.** The player's patch rewrites one guard's *decision rule*. A curse is a row in a
+data table (`sim/curses.ts`) that changes a *shared security parameter*: a range multiplier, a surge period, a
+turn penalty. The FSM reads both every turn. Neither can overwrite the other — a hacked guard still gets the
+longer sight range, and no curse can undo a hack (there is a test for each direction).
 
 What the solver proves about this level:
 
-* with factory AI the vault is out of reach — the best possible haul is **£800**;
-* exactly **one** of the six possible patches opens the vault;
-* with that patch the best possible haul is **£1,900**, not £2,200: taking the servo core (Overclock) makes the
-  vault run impossible, so even a perfect player has to leave something behind.
+* one artifact is easy: the crown can be out of the door in about ten turns;
+* with factory AI the sealed gallery is out of reach — **300** is the most anyone can take;
+* exactly **one** of the six possible patches opens the gallery;
+* with that patch **all three artifacts (600)** are possible, with only seven turns left on the clock;
+* a different patch has a different use: it makes the safe two-artifact run eight turns faster.
 
 ## The AI system
 
@@ -127,13 +130,13 @@ at which the two worlds differ (`sim/replay.ts`).
 
 `sim/solver.ts` runs an exhaustive breadth-first search over the complete game state — player, stolen set, every
 guard's position, facing, FSM state, route index and targets — using the real `step` function, and returns the
-richest possible escape. Two things keep roughly 1.8 million states tractable:
+richest possible escape. Two things keep roughly 800,000 states tractable:
 
 * states are deduplicated by a compact fingerprint and released as soon as they are expanded;
-* **dominance pruning** on the lockdown clock: a state is only revisited if it has strictly more time left
+* **dominance pruning** on the mission clock: a state is only revisited if it has strictly more time left
   than the last time it was seen, because more time is never worse.
 
-The test suite uses the solver to **prove** the three claims above instead of trusting a hand-written route,
+The test suite uses the solver to **prove** the claims above instead of trusting a hand-written route,
 and checks that the stored constants shown in the UI (`LAB_PROVEN`) match what the solver finds.
 
 ## Architecture
@@ -148,7 +151,7 @@ src/
 │   ├── detection.ts    range + cone + line of sight
 │   ├── guard.ts        the FSM (move phase, sense phase)
 │   ├── patch.ts        rule table + one-patch budget
-│   ├── curses.ts       countermeasures triggered by stealing
+│   ├── curses.ts       data-driven curse table and shared security modifiers
 │   ├── simulation.ts   createInitialState, step
 │   ├── replay.ts       recorder + counterfactual comparison
 │   └── solver.ts       exhaustive search for the best possible heist
@@ -169,10 +172,11 @@ src/
 
 * **Simulation and rendering are separate layers.** That is what makes the solver, the replay and headless tests
   possible, and it is why animations cannot change an outcome.
-* **Stealing costs a turn, leaving does not need a key card.** The exit is always open (until a lockdown), so
-  the only thing stopping you from banking your loot is the decision to go for more.
-* **No randomness.** Countermeasures are fixed per prototype and shown up front. Variety comes from the order
-  and combination the player chooses, and determinism is what makes the replay and the solver possible.
+* **A turn budget instead of a countdown in seconds.** A wall clock would make the same inputs produce different
+  outcomes, which would break the replay and the solver. Turns give the same pressure and stay deterministic.
+* **No randomness.** Curses are fixed per artifact and shown up front. Variety comes from the order and
+  combination the player chooses.
+* **Curses are data, not code.** Adding a new curse means adding a row to the table, not a branch in `step`.
 * **Invalid moves consume no turn** and are not recorded, so a replay is exactly the list of turns that happened.
 * **Chasing guards are faster than the player.** With equal speed a chase can never end, and the choice between
   `CHASE` and `INVESTIGATE` would not matter.
@@ -183,11 +187,11 @@ src/
 
 ## Technical highlights
 
-* Deterministic, pure turn-based simulation core with 40 tests that run without a browser.
+* Deterministic, pure turn-based simulation core with 45 tests that run without a browser.
 * Data-driven finite state machines whose transition rules can be swapped at runtime.
 * Exhaustive state-space solver with dominance pruning, used as an automated level-design proof
   (optimal haul with and without a patch).
-* Risk/reward layer built from the same mechanism as the hack: runtime rule changes read by one FSM.
+* Risk/reward layer built on a data-driven modifier table, kept architecturally separate from the AI patch.
 * Counterfactual replay: one input log, two rule sets, automatic divergence detection.
 * Procedural low-poly 3D scene with instanced geometry and post-processing, driven entirely by simulation state.
 * Framework-free UI in strict TypeScript; CI workflow that tests, builds and deploys to GitHub Pages.
@@ -197,8 +201,16 @@ src/
 `.github/workflows/ci.yml` runs the tests and build on every push and publishes `dist/` to GitHub Pages from
 `main`. To enable it: push the repository to GitHub, then set *Settings → Pages → Source* to *GitHub Actions*.
 
+## Multiplayer readiness (not implemented)
+
+Co-op for 2–4 players is a goal, not a feature. What already helps: the simulation is pure, deterministic and
+independent of rendering, which is the shape a lockstep or server-authoritative model needs. What still assumes
+one player: `GameState.player` is a single position, and detection, capture and the solver are written against
+it. The next step would be a `players` array with ids; networking would come after that.
+
 ## Possible next steps
 
+* Seeded "heist of the day": artifact and curse placement from a seed, with the solver computing the par score.
 * A hint button powered by the solver.
-* More levels, validated automatically by the same solver tests.
+* More museums, validated automatically by the same solver tests.
 * Replace primitive models with authored or generated GLB assets (the simulation would not change).

@@ -22,13 +22,12 @@ export const STATE_COLOR: Record<GuardState, number> = {
   RETURN: COLORS.purple,
 };
 
-/** Colour of a prototype, by the countermeasure it is wired to. */
+/** Colour of an artifact, by the curse bound to it. */
 export const CURSE_COLOR: Record<CurseId | 'NONE', number> = {
   NONE: 0xd8f4ff,
-  OVERCLOCK: COLORS.red,
-  SENSOR_BOOST: COLORS.amber,
-  ROLLBACK: COLORS.magenta,
-  LOCKDOWN: COLORS.purple,
+  SIGHT: 0xffd166,
+  PURSUIT: COLORS.red,
+  HOURGLASS: COLORS.purple,
 };
 
 export const css = (hex: number): string => '#' + hex.toString(16).padStart(6, '0');
