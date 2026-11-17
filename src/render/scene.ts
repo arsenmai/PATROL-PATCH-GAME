@@ -40,7 +40,7 @@ export class LabScene {
   private readonly guards: GuardModel[] = [];
   private readonly cones: { tiles: THREE.Mesh[]; material: THREE.MeshBasicMaterial }[] = [];
   private readonly labels: HTMLDivElement[] = [];
-  private readonly pins: { el: HTMLDivElement; at: THREE.Vector3; id: string | null }[] = [];
+  private readonly pins: { el: HTMLDivElement; at: THREE.Vector3; id: string | null; below: boolean }[] = [];
   private readonly labelLayer: HTMLDivElement;
   private readonly selection: THREE.Mesh;
   private readonly clock = new THREE.Clock();
@@ -105,13 +105,14 @@ export class LabScene {
       el.innerHTML = `<b>£${a.value}</b>${a.curse ? `<span>⚠ ${CURSES[a.curse].name}</span>` : '<span>safe</span>'}`;
       el.title = `${a.name}${a.curse ? ' — ' + CURSES[a.curse].summary : ''}`;
       this.labelLayer.appendChild(el);
-      this.pins.push({ el, at: tileToWorld(level, a.pos, a.terminal ? 1.75 : 1.0), id: a.id });
+      // The terminal's tag hangs below it so it never collides with loot on the tile behind.
+      this.pins.push({ el, at: tileToWorld(level, a.pos, a.terminal ? 0 : 1.0), id: a.id, below: !!a.terminal });
     }
     const exitEl = document.createElement('div');
     exitEl.className = 'loot-label exit';
     exitEl.innerHTML = '<b>EXIT</b>';
     this.labelLayer.appendChild(exitEl);
-    this.pins.push({ el: exitEl, at: tileToWorld(level, level.start, 0.1), id: null });
+    this.pins.push({ el: exitEl, at: tileToWorld(level, level.start, 0), id: null, below: true });
 
     this.selection = new THREE.Mesh(
       new THREE.RingGeometry(0.42, 0.47, 32),
@@ -298,7 +299,7 @@ export class LabScene {
       this.projected.copy(pin.at).project(this.camera);
       const x = (this.projected.x * 0.5 + 0.5) * w;
       const y = (-this.projected.y * 0.5 + 0.5) * h;
-      pin.el.style.transform = `translate(-50%, -100%) translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
+      pin.el.style.transform = `translate(-50%, ${pin.below ? '14px' : '-100%'}) translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
     }
   }
 }
