@@ -9,6 +9,10 @@ comes down to one question: leave now, or stay for more?
 
 Afterwards you can replay your exact moves against the *original* AI and see where the two timelines split.
 
+![Gameplay: a full three-artifact heist](docs/gameplay.gif)
+
+[Watch the 30-second gameplay video](docs/rule-heist-gameplay.mp4) (real in-game capture, not generated).
+
 ![Main menu](docs/screenshot-menu.png)
 ![Mid-heist](docs/screenshot-heist.png)
 ![Guard AI Editor](docs/screenshot-editor.png)
